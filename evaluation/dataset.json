@@ -1,0 +1,11 @@
+{
+  "dataset_version": "v0.1-empty",
+  "description": "No human-reviewed benchmark cases have been added yet. Add one JSON object per line to benchmark.jsonl after a permitted corpus has been manually labeled.",
+  "required_fields": {
+    "question": "Natural-language question",
+    "relevant_chunk_ids": "List of expected evidence chunk IDs reviewed by a human",
+    "domains": "Optional list of domain labels"
+  },
+  "actual_case_count": 0
+}
+

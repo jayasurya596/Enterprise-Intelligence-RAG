@@ -1,0 +1,16 @@
+.git
+.env
+config/*.env
+!config/*.example.env
+**/.next
+**/node_modules
+**/__pycache__
+**/.pytest_cache
+*.tsbuildinfo
+**/data
+**/uploads
+outputs
+work
+.env.*
+!.env.example
+frontend/out/

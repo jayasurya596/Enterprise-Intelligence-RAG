@@ -1,0 +1,99 @@
+name: enterprise-intelligence-rag
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: enterprise_rag
+      POSTGRES_USER: rag
+      POSTGRES_PASSWORD: rag
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rag -d enterprise_rag"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:v1.20.0
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "bash -lc '</dev/tcp/127.0.0.1/6333'"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: ${API_BUILD_TARGET:-runtime}
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      DEFAULT_DOMAIN: ${DEFAULT_DOMAIN:-financial}
+      APP_SECRET_KEY: ${APP_SECRET_KEY:-development-only-change-me-before-sharing}
+      DATABASE_URL: postgresql+psycopg://rag:rag@postgres:5432/enterprise_rag
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
+      UPLOAD_DIR: /app/data/uploads
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-25}
+      CHUNK_SIZE_CHARS: ${CHUNK_SIZE_CHARS:-3200}
+      CHUNK_OVERLAP_CHARS: ${CHUNK_OVERLAP_CHARS:-480}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-hashing}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-hashing-v1}
+      EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-384}
+      MIN_DENSE_SCORE: ${MIN_DENSE_SCORE:-0.2}
+      RERANKER_PROVIDER: ${RERANKER_PROVIDER:-none}
+      RERANKER_MODEL: ${RERANKER_MODEL:-BAAI/bge-reranker-base}
+      GENERATION_PROVIDER: ${GENERATION_PROVIDER:-local}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      TOP_K_DENSE: ${TOP_K_DENSE:-20}
+      TOP_K_BM25: ${TOP_K_BM25:-20}
+      TOP_K_RERANK: ${TOP_K_RERANK:-8}
+      RRF_K: ${RRF_K:-60}
+      ACCESS_TOKEN_MINUTES: ${ACCESS_TOKEN_MINUTES:-45}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - uploaded_files:/app/data/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=2)"]
+      interval: 10s
+      timeout: 4s
+      retries: 12
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+        NEXT_PUBLIC_DEFAULT_DOMAIN: ${DEFAULT_DOMAIN:-financial}
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  qdrant_data:
+  uploaded_files:
+

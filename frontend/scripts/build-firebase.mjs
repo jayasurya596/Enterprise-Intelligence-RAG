@@ -1,0 +1,20 @@
+import { spawnSync } from "node:child_process";
+import nextEnv from "@next/env";
+const { loadEnvConfig } = nextEnv;
+
+loadEnvConfig(process.cwd(), true);
+const required = [
+  "NEXT_PUBLIC_FIREBASE_API_KEY",
+  "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN",
+  "NEXT_PUBLIC_FIREBASE_PROJECT_ID",
+  "NEXT_PUBLIC_FIREBASE_APP_ID",
+];
+const missing = required.filter((name) => !process.env[name]);
+if (missing.length) {
+  console.error(`Missing Firebase web settings: ${missing.join(", ")}. Copy .env.example to .env.local and fill them from Firebase Console.`);
+  process.exit(1);
+}
+
+process.env.NEXT_STATIC_EXPORT = "1";
+const result = spawnSync(process.execPath, ["node_modules/next/dist/bin/next", "build"], { stdio: "inherit", env: process.env });
+process.exit(result.status ?? 1);

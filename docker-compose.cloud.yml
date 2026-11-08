@@ -1,0 +1,88 @@
+# NOT A ZERO-COST PROFILE. Legacy provider-neutral cloud template for paid external data services.
+# It does not provide email/phone OTP and is not production-ready. See docs/FREE-TIER-PLAN.md before use.
+name: enterprise-intelligence-rag
+services:
+  api:
+    image: ${APP_IMAGE:?Set APP_IMAGE to an immutable API image reference}
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: runtime
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    environment:
+      APP_ENV: production
+      DEFAULT_DOMAIN: ${DEFAULT_DOMAIN:-financial}
+      APP_SECRET_KEY: ${APP_SECRET_KEY:?Inject APP_SECRET_KEY from the cloud secret manager}
+      DATABASE_URL: ${DATABASE_URL:?Set a TLS-enabled managed PostgreSQL URL}
+      QDRANT_URL: ${QDRANT_URL:?Set the private HTTPS Qdrant endpoint}
+      QDRANT_API_KEY: ${QDRANT_API_KEY:?Inject QDRANT_API_KEY from the cloud secret manager}
+      UPLOAD_DIR: /app/data/uploads
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-25}
+      CHUNK_SIZE_CHARS: ${CHUNK_SIZE_CHARS:-3200}
+      CHUNK_OVERLAP_CHARS: ${CHUNK_OVERLAP_CHARS:-480}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-hashing}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-hashing-v1}
+      EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-384}
+      MIN_DENSE_SCORE: ${MIN_DENSE_SCORE:-0.2}
+      RERANKER_PROVIDER: ${RERANKER_PROVIDER:-none}
+      RERANKER_MODEL: ${RERANKER_MODEL:-BAAI/bge-reranker-base}
+      GENERATION_PROVIDER: ${GENERATION_PROVIDER:-local}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      TOP_K_DENSE: ${TOP_K_DENSE:-20}
+      TOP_K_BM25: ${TOP_K_BM25:-20}
+      TOP_K_RERANK: ${TOP_K_RERANK:-8}
+      RRF_K: ${RRF_K:-60}
+      ACCESS_TOKEN_MINUTES: ${ACCESS_TOKEN_MINUTES:-45}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:?Set the exact HTTPS frontend origin}
+    volumes:
+      - uploads:/app/data/uploads
+    expose:
+      - "8000"
+    networks:
+      - cloud_edge
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=2)"]
+      interval: 10s
+      timeout: 4s
+      retries: 12
+    restart: unless-stopped
+
+  web:
+    image: ${WEB_IMAGE:?Set WEB_IMAGE to an immutable web image reference}
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:?Set the final HTTPS API URL before building}
+        NEXT_PUBLIC_DEFAULT_DOMAIN: ${DEFAULT_DOMAIN:-financial}
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    expose:
+      - "3000"
+    networks:
+      - cloud_edge
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  uploads:
+    external: true
+    name: ${UPLOAD_VOLUME:?Set the pre-created durable encrypted upload volume}
+
+networks:
+  cloud_edge:
+    external: true
+    name: ${CLOUD_INGRESS_NETWORK:?Set the pre-created cloud ingress network}

@@ -1,0 +1,270 @@
+// Prototype data model and limits (all fields required unless marked optional):
+// users/{uid}/documents/{documentId}, ID document_000..document_049:
+//   source_name string 1..240 chars (immutable); content_type string 1..120
+//   chars (immutable); byte_size integer 1..5,242,880 (immutable); status
+//   "processing" then "ready" only; error_summary null; domain_labels list of
+//   1..10 strings, each 1..40 chars (immutable); chunk_count integer 1..20
+//   (immutable); created_at timestamp (immutable).
+// users/{uid}/documents/{documentId}/chunks/{chunkId}, ID chunk_000..chunk_019:
+//   document_id string equal to parent ID; document_name string 1..240 chars;
+//   page_number null or integer 1..100000; text string 1..2000 chars;
+//   domain_labels as above; created_at timestamp. All fields immutable.
+// users/{uid}/conversations/{conversationId}, ID conversation_000..049:
+//   title string 1..80 chars; created_at timestamp (immutable); updated_at
+//   timestamp, refreshed on each message pair. Deletion is not allowed.
+// users/{uid}/conversations/{conversationId}/messages/{messageId}, ID
+//   message_000..099: role "user" or "assistant"; content string 1..6000
+//   chars; citations list of 0..3 maps with a [S1]..[S3] marker, bounded
+//   document/chunk IDs, document name, page number, and excerpt 1..900 chars;
+//   created_at timestamp. All fields immutable; owner may delete messages.
+// Identity comes from the authenticated, email-verified UID in the path, never
+// from a user-editable ownership field. Fixed slots cap each account at 50
+// documents, 1,000 chunks total, 50 conversations, and 100 messages each.
+// No organization sharing, global rate limit, or project-wide quota is enforced.
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    function verifiedOwner(uid) {
+      return isOwner(uid) && request.auth.token.email_verified == true;
+    }
+
+    function hasRequiredFields(data, fields) {
+      return data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(data, fields) {
+      return data.keys().hasOnly(fields);
+    }
+
+    function uidUnchanged(uid) {
+      return !('uid' in request.resource.data) || request.resource.data.uid == uid;
+    }
+
+    function uidNotModified() {
+      return !('uid' in resource.data) && !('uid' in request.resource.data);
+    }
+
+    function validString(value, minimum, maximum) {
+      return value is string && value.size() >= minimum && value.size() <= maximum;
+    }
+
+    function validLabelAt(labels, index) {
+      return labels[index] is string && labels[index].size() >= 1 && labels[index].size() <= 40;
+    }
+
+    function validLabels(labels) {
+      return labels is list && labels.size() >= 1 && labels.size() <= 10
+        && validLabelAt(labels, 0)
+        && (labels.size() < 2 || validLabelAt(labels, 1))
+        && (labels.size() < 3 || validLabelAt(labels, 2))
+        && (labels.size() < 4 || validLabelAt(labels, 3))
+        && (labels.size() < 5 || validLabelAt(labels, 4))
+        && (labels.size() < 6 || validLabelAt(labels, 5))
+        && (labels.size() < 7 || validLabelAt(labels, 6))
+        && (labels.size() < 8 || validLabelAt(labels, 7))
+        && (labels.size() < 9 || validLabelAt(labels, 8))
+        && (labels.size() < 10 || validLabelAt(labels, 9));
+    }
+
+    function validTimestampAtRequestTime(value) {
+      return value is timestamp && value == request.time;
+    }
+
+    function validDocumentId(documentId) {
+      return documentId.matches('^document_0[0-4][0-9]$');
+    }
+
+    function validChunkId(chunkId) {
+      return chunkId.matches('^chunk_0(0[0-9]|1[0-9])$');
+    }
+
+    function validConversationId(conversationId) {
+      return conversationId.matches('^conversation_0[0-4][0-9]$');
+    }
+
+    function validMessageId(messageId) {
+      return messageId.matches('^message_0[0-9]{2}$');
+    }
+
+    function validDocument(data) {
+      return hasRequiredFields(data, [
+          'source_name', 'content_type', 'byte_size', 'status', 'error_summary',
+          'domain_labels', 'chunk_count', 'created_at'
+        ])
+        && hasOnlyAllowedFields(data, [
+          'source_name', 'content_type', 'byte_size', 'status', 'error_summary',
+          'domain_labels', 'chunk_count', 'created_at'
+        ])
+        && validString(data.source_name, 1, 240)
+        && validString(data.content_type, 1, 120)
+        && data.byte_size is int && data.byte_size > 0 && data.byte_size <= 5242880
+        && data.status in ['processing', 'ready']
+        && data.error_summary == null
+        && validLabels(data.domain_labels)
+        && data.chunk_count is int && data.chunk_count >= 1 && data.chunk_count <= 20
+        && data.created_at is timestamp;
+    }
+
+    function validDocumentCreate(documentId) {
+      return validDocumentId(documentId)
+        && validDocument(request.resource.data)
+        && uidUnchanged(request.auth.uid)
+        && request.resource.data.status == 'processing'
+        && validTimestampAtRequestTime(request.resource.data.created_at);
+    }
+
+    function validDocumentUpdate(documentId) {
+      return validDocumentId(documentId)
+        && validDocument(request.resource.data)
+        && uidNotModified()
+        && resource.data.status == 'processing'
+        && request.resource.data.status == 'ready'
+        && request.resource.data.created_at == resource.data.created_at
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+    }
+
+    function validPageNumber(value) {
+      return value == null || (value is int && value >= 1 && value <= 100000);
+    }
+
+    function validChunk(data, documentId) {
+      return hasRequiredFields(data, [
+          'document_id', 'document_name', 'page_number', 'text', 'domain_labels', 'created_at'
+        ])
+        && hasOnlyAllowedFields(data, [
+          'document_id', 'document_name', 'page_number', 'text', 'domain_labels', 'created_at'
+        ])
+        && data.document_id == documentId
+        && validString(data.document_name, 1, 240)
+        && validPageNumber(data.page_number)
+        && validString(data.text, 1, 2000)
+        && validLabels(data.domain_labels)
+        && data.created_at is timestamp;
+    }
+
+    function validChunkCreate(uid, documentId, chunkId) {
+      let source = get(/databases/$(database)/documents/users/$(uid)/documents/$(documentId));
+      return validDocumentId(documentId)
+        && validChunkId(chunkId)
+        && validChunk(request.resource.data, documentId)
+        && uidUnchanged(request.auth.uid)
+        && validTimestampAtRequestTime(request.resource.data.created_at)
+        && source.data.status == 'processing'
+        && source.data.source_name == request.resource.data.document_name
+        && source.data.domain_labels == request.resource.data.domain_labels;
+    }
+
+    function validConversation(data) {
+      return hasRequiredFields(data, ['title', 'created_at', 'updated_at'])
+        && hasOnlyAllowedFields(data, ['title', 'created_at', 'updated_at'])
+        && validString(data.title, 1, 80)
+        && data.created_at is timestamp
+        && data.updated_at is timestamp;
+    }
+
+    function validConversationCreate(conversationId) {
+      return validConversationId(conversationId)
+        && validConversation(request.resource.data)
+        && uidUnchanged(request.auth.uid)
+        && validTimestampAtRequestTime(request.resource.data.created_at)
+        && validTimestampAtRequestTime(request.resource.data.updated_at);
+    }
+
+    function validConversationUpdate(conversationId) {
+      return validConversationId(conversationId)
+        && validConversation(request.resource.data)
+        && uidNotModified()
+        && request.resource.data.title == resource.data.title
+        && request.resource.data.created_at == resource.data.created_at
+        && validTimestampAtRequestTime(request.resource.data.updated_at)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['updated_at']);
+    }
+
+    function validCitation(citation) {
+      return citation is map
+        && hasRequiredFields(citation, [
+          'marker', 'document_id', 'chunk_id', 'document_name', 'page_number', 'excerpt'
+        ])
+        && hasOnlyAllowedFields(citation, [
+          'marker', 'document_id', 'chunk_id', 'document_name', 'page_number', 'excerpt'
+        ])
+        && citation.marker in ['[S1]', '[S2]', '[S3]']
+        && citation.document_id is string
+        && validDocumentId(citation.document_id)
+        && citation.chunk_id is string
+        && validChunkId(citation.chunk_id)
+        && validString(citation.document_name, 1, 240)
+        && validPageNumber(citation.page_number)
+        && validString(citation.excerpt, 1, 900);
+    }
+
+    function validCitations(citations) {
+      return citations is list && citations.size() <= 3
+        && (citations.size() < 1 || validCitation(citations[0]))
+        && (citations.size() < 2 || validCitation(citations[1]))
+        && (citations.size() < 3 || validCitation(citations[2]));
+    }
+
+    function validMessage(data) {
+      return hasRequiredFields(data, ['role', 'content', 'citations', 'created_at'])
+        && hasOnlyAllowedFields(data, ['role', 'content', 'citations', 'created_at'])
+        && data.role in ['user', 'assistant']
+        && validString(data.content, 1, 6000)
+        && validCitations(data.citations)
+        && data.created_at is timestamp;
+    }
+
+    function validMessageCreate(uid, conversationId, messageId) {
+      let conversation = getAfter(/databases/$(database)/documents/users/$(uid)/conversations/$(conversationId));
+      return validConversationId(conversationId)
+        && validMessageId(messageId)
+        && validMessage(request.resource.data)
+        && uidUnchanged(request.auth.uid)
+        && validTimestampAtRequestTime(request.resource.data.created_at)
+        && validConversation(conversation.data)
+        && conversation.data.updated_at == request.time;
+    }
+
+    match /users/{uid}/documents/{documentId} {
+      allow read: if verifiedOwner(uid) && validDocumentId(documentId);
+      allow create: if verifiedOwner(uid) && validDocumentCreate(documentId);
+      allow update: if verifiedOwner(uid) && validDocumentUpdate(documentId);
+      allow delete: if verifiedOwner(uid) && validDocumentId(documentId) && validDocument(resource.data);
+
+      match /chunks/{chunkId} {
+        allow read: if verifiedOwner(uid) && validDocumentId(documentId) && validChunkId(chunkId);
+        allow create: if verifiedOwner(uid) && validChunkCreate(uid, documentId, chunkId);
+        allow update: if false;
+        allow delete: if verifiedOwner(uid) && validDocumentId(documentId) && validChunkId(chunkId);
+      }
+    }
+
+    match /users/{uid}/conversations/{conversationId} {
+      allow read: if verifiedOwner(uid) && validConversationId(conversationId);
+      allow create: if verifiedOwner(uid) && validConversationCreate(conversationId);
+      allow update: if verifiedOwner(uid) && validConversationUpdate(conversationId);
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        allow read: if verifiedOwner(uid) && validConversationId(conversationId) && validMessageId(messageId);
+        allow create: if verifiedOwner(uid) && validMessageCreate(uid, conversationId, messageId);
+        allow update: if false;
+        allow delete: if verifiedOwner(uid) && validConversationId(conversationId) && validMessageId(messageId);
+      }
+    }
+
+    // Default deny for all collections not explicitly allowed above.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
