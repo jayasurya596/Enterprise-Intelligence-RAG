@@ -1,0 +1,32 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "enterprise-intelligence-rag-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-09",
+  "observability": { "enabled": true },
+  "vars": {
+    "FIREBASE_PROJECT_ID": "eirag-rag-261106-a7c9",
+    "FRONTEND_ORIGINS": "https://enterprise-intelligence-rag-api.penchalajayasuryachappidi.workers.dev,https://eirag-rag-261106-a7c9.web.app,http://localhost:3000"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "enterprise-intelligence-rag",
+      "database_id": "ed0addc8-a7d9-48e6-ae78-00c85c8df793",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vectorize": [
+    {
+      "binding": "VECTORIZE",
+      "index_name": "enterprise-intelligence-rag-vectors"
+    }
+  ],
+  "ai": { "binding": "AI" },
+  "assets": {
+    "directory": "../../frontend/out",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": true
+  }
+}

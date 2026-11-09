@@ -1,55 +1,47 @@
-# Strict-$0 Firebase prototype
+# Cloudflare-backed low-cost deployment
 
 ## Selected profile
 
 - Domain: financial
-- Target: investor demonstration
-- Hosting/data provider: Firebase on the no-cost Spark plan
-- Approach: upgrade the existing project with a static Firebase frontend
-- Spend: billing status was checked; no billing account is attached and no billing link was created
+- Website: Cloudflare Worker static assets
+- Identity: Firebase Authentication email/password with verification link
+- Workspace backend: Cloudflare Workers, D1, Vectorize, and Workers AI
+- Spend goal: minimize cost and stay within included allowances where possible; not a guaranteed $0 account
+- Website and Worker: deployed
+- Original Docker/FastAPI/PostgreSQL/Qdrant stack: retained for local development
 
-This is a constrained prototype, not a production financial service. Firebase Spark quotas are limited and can pause service when exceeded. The Google Cloud Free Tier is not used because it requires Cloud Billing and does not provide a guaranteed hard spending cap.
+## Cloud services
 
-## Current setup
-
-Google Cloud project `eirag-rag-261106-a7c9` is now a Firebase project. Email/password Authentication is enabled, the default Standard Firestore database is active in `asia-south1` (Mumbai), the prototype rules are deployed, and the static site is live at [https://eirag-rag-261106-a7c9.web.app](https://eirag-rag-261106-a7c9.web.app). Billing is not enabled and no billing account is attached. Firestore location is permanent after creation. No financial corpus should be uploaded until the data-location and handling decision has been reviewed.
-
-## Architecture implemented
-
-| Area | Implementation | Limits |
+| Function | Service | Data |
 |---|---|---|
-| Web hosting | Next.js static export for Firebase Hosting | No server routes or always-on API |
-| Accounts | Firebase Authentication email/password; email verification link required for workspace access | No numeric email OTP or phone SMS |
-| Account data | Cloud Firestore client SDK, scoped under the authenticated user's UID | Firestore Spark quota applies |
-| Access rules | Owner-only Firestore rules; only verified accounts can access their own records | No organization roles or shared workspaces |
-| Document processing | Browser extraction for PDF, DOCX, TXT, CSV | 5 MB/file, 40,000 extracted characters/file, 20 chunks/file |
-| Search | Browser-side lexical word overlap and source excerpts | No embeddings, semantic retrieval, or generative answer |
-| Workspace caps | Fixed Firestore slots and rules cap each account at 50 documents, 20 chunks/file (1,000 total), 50 conversations, and 100 messages/conversation | No global rate limit across accounts; project Spark quotas are shared |
-| Original files | Not archived; only extracted text and metadata are saved | User must retain original copies |
-| AI model | None | No model charges or external inference |
+| Static site and API | Cloudflare Workers | Public client files and authenticated API routes |
+| Sign-in credentials | Firebase Authentication | Email, password credential, verification status |
+| Workspace profile | Cloudflare D1 | Firebase UID and verified email |
+| Workspace content | Cloudflare D1 | Extracted document text, metadata, chats, messages, citations |
+| Semantic retrieval | Cloudflare Vectorize | 384-dimensional embeddings plus owner/document/chunk metadata |
+| Embeddings and answers | Workers AI | Document/query embeddings and retrieved answer context |
+| Original files | Browser only | Not archived |
 
-Firebase Authentication stores password credentials. The application stores extracted text, document metadata, conversation messages, and citations in Firestore. Firestore quotas are currently 1 GiB stored data, 50,000 reads/day, 20,000 writes/day, and 20,000 deletes/day for qualifying databases. See [Firestore pricing](https://firebase.google.com/docs/firestore/pricing). Firebase Hosting also has storage and transfer quotas; see [Hosting usage and pricing](https://firebase.google.com/docs/hosting/usage-quotas-pricing).
+On first verified sign-in, any old Firestore workspace records are copied to D1 and Vectorize. Firestore is kept as the migration source. The Worker never receives or stores a password. Firebase Authentication remains the identity provider to preserve existing accounts; the site and RAG backend now run on Cloudflare.
 
-## Authentication decision
+## Limits and cost control
 
-Firebase's default email verification sends a one-time link, not a numeric email code. Real phone verification SMS is not included in this no-billing profile; Firebase's phone provider requires a billing-backed plan for real SMS delivery. Test phone numbers are not a substitute for real-user SMS. See [Firebase Authentication limits](https://firebase.google.com/docs/auth/limits) and [Authentication FAQ](https://firebase.google.com/docs/auth/faq-and-troubleshooting).
+The app enforces 50 documents, 20 chunks/document, 1,000 total chunks, 50 conversations, 100 messages/conversation, and the file extraction limits of 5 MB and 40,000 characters.
 
-The app does not claim that SMS or numeric email OTP works. If either exact OTP requirement is mandatory, this project needs a costed provider and an abuse/rate-limit design before it can be added.
+The Worker uses BGE Small embeddings and the currently listed Llama 3.3 70B FP8 Fast answer model. It tracks an application-wide daily AI budget: 250,000 embedding input characters, 50,000 generation input characters, and 5,000 reserved output tokens. If a budget is reached, answer generation falls back to source excerpts; indexing reports a limit error until the next UTC day.
 
-## Deployment completed
+Cloudflare's published Workers AI allowance is 10,000 neurons/account/day; on Workers Paid, usage above that is billed. The app budget cannot see usage from other Workers on the same account, so it cannot promise a $0 invoice by itself. D1 and Vectorize also have finite included quotas. Review [Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/), [D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/), and [Vectorize pricing](https://developers.cloudflare.com/vectorize/platform/pricing/), and monitor Cloudflare account usage before broad sharing.
 
-The live demo URL is [https://eirag-rag-261106-a7c9.web.app](https://eirag-rag-261106-a7c9.web.app). Authentication, the Firestore database, deployed security rules, and Hosting were provisioned without attaching billing. The app was built with the project's Firebase web settings, and the public page was smoke-checked in a browser. The registration flow was not submitted, so real mailbox delivery and signed-in data operations still need an owner-run check.
+## Verification and OTP
 
-The local Firebase web settings are in ignored `frontend/.env.local` and are intentionally excluded from the source archive. Use `frontend/.env.example` to configure another local checkout. Do not use a service-account key in the browser or place any private credential in the web app's environment variables.
+Firebase sends an email verification link to the actual email address. Numeric email OTP and real phone SMS OTP are not active. Cloudflare Email Service requires a domain configured with Cloudflare DNS, and no domain was available during setup. SMS needs a separate provider. Adding these exact OTP methods requires provider configuration and may add cost.
 
-## What is still outside the $0 profile
+## Data location and limitations
 
-- Real phone SMS OTP or numeric email OTP delivery
-- Production-grade RAG model, vector database, or server-side processing
-- Cloud archive of original files
-- Organization SSO, shared workspaces, MFA enforcement, tenant administration
-- Rate limiting and global storage quotas that resist account abuse
-- Formal privacy, threat, compliance, load, backup/restore, and disaster-recovery review
-- Production monitoring, incident response, and support
+Cloudflare created D1 in APAC. This is not a financial-data residency or compliance review. The site is a demo, not a production financial service. No formal threat model, regulated-data assessment, global abuse limit, financial answer benchmark, or backup/restore exercise has been completed.
 
-See [PRODUCTION-FIT.md](PRODUCTION-FIT.md) and [BUILD-STATUS.md](BUILD-STATUS.md) before using confidential or business-critical financial data.
+## Local configuration
+
+frontend/.env.local and root .env are local ignored files. They contain public Firebase web settings and the Cloudflare Worker URL; they do not contain a Firebase service-account private key. Do not commit them.
+
+See DEPLOYMENT.md for rebuild steps.

@@ -8,6 +8,7 @@ const required = [
   "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN",
   "NEXT_PUBLIC_FIREBASE_PROJECT_ID",
   "NEXT_PUBLIC_FIREBASE_APP_ID",
+  "NEXT_PUBLIC_CLOUDFLARE_API_URL",
 ];
 const missing = required.filter((name) => !process.env[name]);
 if (missing.length) {

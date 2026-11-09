@@ -1,40 +1,46 @@
 # Financial RAG readiness review
 
-## Decision
+## Current decision
 
-The requested strict-$0 profile has been implemented and deployed as a small Firebase demo at [https://eirag-rag-261106-a7c9.web.app](https://eirag-rag-261106-a7c9.web.app). It is **not production-ready for financial data**; see [BUILD-STATUS.md](BUILD-STATUS.md).
+The website and Cloudflare backend are deployed for a controlled demonstration:
+
+- Website and API: [https://enterprise-intelligence-rag-api.penchalajayasuryachappidi.workers.dev](https://enterprise-intelligence-rag-api.penchalajayasuryachappidi.workers.dev)
+- Firebase Hosting fallback: [https://eirag-rag-261106-a7c9.web.app](https://eirag-rag-261106-a7c9.web.app)
+
+This is **not production-ready for confidential or business-critical financial data**.
 
 ## Requirement status
 
 | Requirement | Status | Notes |
 |---|---|---|
-| Financial domain | Partial | UI defaults to `financial`; no reviewed financial benchmark has been run. |
-| Public access from an investor's laptop | Deployed | Firebase Hosting is live. Sign-in/create-account UI was smoke-checked in a browser. |
-| Persistent accounts | Deployed, real registration unverified | Firebase Authentication email/password is enabled; registration was not submitted, so no live verification email was tested. |
-| Verify original email address | Implemented in source | Uses Firebase email verification link. No numeric email OTP. |
-| Verify original phone number | Excluded | Real Firebase SMS requires billing-backed service, contrary to strict $0. |
-| Store workspace data | Implemented in source | Extracted text, metadata, chat, and citations are stored in a user's Firestore path with owner-only rules. No original files are archived. |
-| RAG answers | Limited | Word-overlap matching returns cited source excerpts. No embedding model or generative answer is used. |
-| Free account quotas | Limited | Firestore rules enforce fixed per-account slots: 50 documents, 20 chunks/document, 50 conversations, and 100 messages/conversation. There is no global per-project rate limit, so shared Spark quotas can still be exhausted. |
-| Financial production controls | Not passing | No formal security, abuse, regulatory, availability, backup/recovery, or capacity review. |
-| One-day timeline | Not a readiness claim | A target duration does not prove production suitability. |
+| Public site | Deployed | Cloudflare Worker serves the static frontend and API from one address. |
+| Persistent accounts | Implemented, signup unverified | Firebase Authentication owns email/password credentials. |
+| Email ownership | Implemented in source | Real verification link; delivery was not exercised during this change. |
+| Numeric email OTP | Not implemented | Deployed flow is a link, not a numeric code. |
+| Phone OTP | Not implemented | No SMS provider or real-number test is configured. |
+| Cloud workspace storage | Deployed | D1 stores profile UID/email, document text, chats, and citations. |
+| Semantic retrieval | Deployed in code | Vectorize and owner metadata filter are present; authenticated query was not exercised. |
+| Generative answers | Deployed in code | Workers AI binding is present; authenticated answer generation was not exercised. |
+| Tenant isolation | Implemented in code | Token verification plus owner-scoped D1 queries and Vectorize filter; needs full signed-in test. |
+| Legacy data migration | Implemented in code | First verified login copies Firestore content; source records are preserved. |
+| Free usage | Limited | App AI budget is not account-wide; paid overage can still occur from other account usage. |
+| Financial accuracy/compliance | Not passing | No human-labeled benchmark, legal/regulatory assessment, or certification. |
 
-## Security and data limitations
+## QA evidence and remaining gaps
 
-Prototype Firestore rules restrict data access to the signed-in, email-verified UID, validate supported document shapes, and use fixed path slots to bound one account's stored records. They are deployed; Firebase's compiler and five simulated read allow/deny cases passed. The emulator was not run and broader write-path testing is outstanding. They do not provide organization-level administration or a global per-project rate limit. Multiple accounts can still consume shared free quotas.
+The frontend typecheck and Firebase static build pass. The Worker typecheck and Wrangler dry run pass. The deployed Worker returned HTTP 200 from readiness, HTTP 401 without a token, HTTP 403 to a disallowed origin, and HTTP 204 for the approved-site preflight. All three D1 migrations are applied, including tenant-scoped IDs; a temporary remote SQL check confirmed that identical legacy IDs can exist across accounts and conversations. The temporary rows were deleted. Vectorize has the owner metadata index. A small model smoke request confirmed that both embedding and answer-generation models are callable.
 
-Do not upload confidential investor, customer, or company records until the business approves Google's terms, the Firestore data region, retention/deletion, backup, and access policy. The original uploaded file remains in the browser and is not a cloud archive. The saved extracted text and conversations are cloud data.
+A verified Firebase account is still needed for end-to-end tests of sign-in, first-run Firestore migration, document indexing, cross-account isolation, search, answer generation, deletion, and message persistence. No real registration email or OTP was sent in this change.
 
-The local Docker app is separate from the Firebase version. Its existing email/password flow does not verify ownership and its production API startup gate remains fail-closed.
+## Required before production use
 
-## What is needed before production use
+- Complete a signed-in test with two verified accounts and confirm they cannot see each other's records.
+- Implement numeric email OTP and real SMS OTP with a provider, budget, rate limits, and abuse protections if those are mandatory.
+- Conduct a threat model and independent security review, including prompt injection, upload parsing, token abuse, and account recovery.
+- Define organization roles, administrator workflows, support procedures, and global quotas/rate limits.
+- Review provider data-processing terms, retention/deletion, APAC location, and financial-data residency obligations.
+- Build a human-reviewed financial retrieval/answer benchmark and define when the system must abstain.
+- Add monitored backups, restore testing, alerts, and incident response.
+- Confirm Cloudflare plan and account-wide AI use against the desired spend target.
 
-- Decide whether real phone OTP, numeric email OTP, or email verification links satisfy the requirement; cost real SMS separately.
-- Define organization roles, account recovery, abuse limits, global quotas, and administrative controls.
-- Complete a threat model, security review, dependency monitoring, and incident response process.
-- Review Firebase terms, data processing, retention, regional requirements, backups, and deletion.
-- Build and review a human-labeled financial corpus and measure answer/retrieval quality.
-- Run abuse, load, backup/restore, and recovery exercises.
-- Select and cost durable storage and server-side processing if original files or semantic RAG are required.
-
-This profile should be presented as an investor demonstration, not an enterprise or production financial service.
+Do not market this build as a compliant financial decision system or upload sensitive investor/customer records before those reviews.

@@ -16,4 +16,3 @@ evaluation/reports/*.json
 .env.*
 !.env.example
 frontend/out/
-

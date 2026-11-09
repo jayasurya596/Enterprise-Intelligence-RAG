@@ -1,36 +1,60 @@
 # Enterprise Intelligence RAG
 
-## Current build
+## Live site
 
-This project now includes a strict-$0 Firebase prototype alongside the original local Docker RAG stack. The cloud prototype is a static Next.js site intended for Firebase Hosting, with Firebase Authentication and Cloud Firestore. It does not need a paid model API or an always-on backend.
+- Website and API: [https://enterprise-intelligence-rag-api.penchalajayasuryachappidi.workers.dev](https://enterprise-intelligence-rag-api.penchalajayasuryachappidi.workers.dev)
+- API readiness: [https://enterprise-intelligence-rag-api.penchalajayasuryachappidi.workers.dev/health/ready](https://enterprise-intelligence-rag-api.penchalajayasuryachappidi.workers.dev/health/ready)
+- Previous Firebase Hosting address remains available as a fallback: [https://eirag-rag-261106-a7c9.web.app](https://eirag-rag-261106-a7c9.web.app)
 
-**Deployment status:** the strict-$0 demo is live at [https://eirag-rag-261106-a7c9.web.app](https://eirag-rag-261106-a7c9.web.app). Firebase Authentication uses email/password with an email verification link; Firestore stores account-owned workspace data, and Hosting serves the static site. The project has no billing account attached. This is an investor demo, not a production financial service. See [docs/BUILD-STATUS.md](docs/BUILD-STATUS.md).
+The website assets and workspace API now run on Cloudflare Workers. Firebase Authentication still provides account identity and email/password sign-in so existing accounts remain usable; this is not a Cloudflare-only identity setup. Workspace requests require a valid Firebase ID token from an email-verified account.
 
-## What the free prototype does
+## What it does
 
-- Creates email/password accounts using Firebase Authentication and requires email verification by link.
-- Saves account-owned document text, conversation messages, and citations in Cloud Firestore.
-- Extracts text in the browser from PDF, DOCX, TXT, and CSV files up to 5 MB each.
-- Searches extracted text by lexical word overlap and returns source excerpts. It does not call a generative model.
-- Keeps original uploaded files in the browser only; it does not archive the originals.
-- Enforces 50 documents, 20 chunks per document (1,000 total), 50 conversations, and 100 messages per conversation with fixed Firestore ID slots and matching rules.
+- Firebase Authentication handles email/password credentials and verifies account ownership with an email link.
+- Cloudflare D1 stores verified user profile identifiers, extracted document text, metadata, conversations, messages, and citations.
+- Cloudflare Vectorize stores 384-dimensional document embeddings and searches only within the authenticated owner’s vectors.
+- Cloudflare Workers AI uses BGE Small embeddings and the current Llama 3.3 model to draft answers from retrieved source excerpts.
+- PDF, DOCX, TXT, and CSV text extraction runs in the browser. Limits are 5 MB, 40,000 extracted characters, and 20 chunks per document. Original files are not archived.
+- Per-account limits are 50 documents, 1,000 chunks, 50 conversations, and 100 messages per conversation.
+- On first verified sign-in, any earlier Firestore documents and conversations are copied to Cloudflare. The source records remain in Firestore.
 
-The $0 profile has no numeric email OTP and no real phone SMS OTP. Firebase's email verification is a link, not a numeric code. The public prototype is not certified for production financial data. Firestore and Hosting also have account/project quotas; service can be limited when those quotas are reached. See [Firebase Authentication limits](https://firebase.google.com/docs/auth/limits), [Firestore pricing](https://firebase.google.com/docs/firestore/pricing), and [Firebase Hosting quotas](https://firebase.google.com/docs/hosting/usage-quotas-pricing).
+Passwords remain in Firebase Authentication. Cloudflare stores the authenticated UID and email for workspace ownership; it never stores the password.
 
-## Firebase deployment
+## Data flow and privacy
 
-The deployed demo is available at [https://eirag-rag-261106-a7c9.web.app](https://eirag-rag-261106-a7c9.web.app). Firebase project `eirag-rag-261106-a7c9` has email/password Authentication, a Standard `(default)` Firestore database in `asia-south1` (Mumbai), owner-scoped Firestore rules, and Firebase Hosting. The project has no billing account attached. Firebase Web configuration is kept in the ignored local file `frontend/.env.local`; use [frontend/.env.example](frontend/.env.example) as a template when building locally, and never put service-account credentials or private API secrets in the frontend.
+The browser extracts text, then sends the chunks over HTTPS to the Worker. The Worker verifies the Firebase token, saves workspace data in D1, writes embeddings to Vectorize, and sends questions plus retrieved excerpts to Workers AI when drafting answers. Do not upload confidential financial or customer data until your organization has reviewed provider terms, retention, region, and security requirements.
 
-The live smoke check confirmed that the site loads and the sign-in/create-account interface renders. Registration was not submitted, so real mailbox delivery and a signed-in Firestore read/write were not verified. The project uses a real email verification link, not a numeric OTP. Real phone SMS OTP is outside this no-billing setup.
+## Account and OTP behavior
 
-The Firebase project alias is recorded in [.firebaserc](.firebaserc). The deployed Firestore rules passed Firebase's compiler and five simulated allow/deny read cases. The security review is still a prototype review, not a production certification; see [docs/BUILD-STATUS.md](docs/BUILD-STATUS.md).
+Verification uses a link delivered to the actual email address. Numeric email OTP and phone SMS OTP are not configured. Cloudflare Email Sending needs a domain onboarded to Cloudflare DNS; no domain is configured for this project. Real SMS also needs a delivery provider.
 
-## Original local Docker app
+## Cost and service limits
 
-The original backend-based app remains available for local development. It uses FastAPI, PostgreSQL, Qdrant, and local file storage, and is not the Firebase-hosted app. Read [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the local stack and data lifecycle. Do not use the legacy `docker-compose.cloud.yml` as a $0 cloud recipe.
+This deployment is configured for low-cost use, not unlimited guaranteed $0 usage. D1 and Vectorize have free allowances. Workers AI provides 10,000 neurons per account per day; use above that on Workers Paid is billable. The app has a daily AI budget, but cannot account for other Cloudflare Workers using the same account. Check your plan and AI usage dashboard before sharing broadly. [Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/), [D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/), [Vectorize pricing](https://developers.cloudflare.com/vectorize/platform/pricing/).
 
-## Production boundary
+This is a demonstration build, not a certified financial product. Formal security, compliance, load, backup/restore, and financial answer-quality reviews have not been completed.
 
-This is a demonstration build, not a production financial service. It has no numeric OTP, real SMS verification, organization membership, managed abuse controls, formal security review, financial benchmark, backup/restore exercise, or production monitoring. Do not upload confidential investor or customer records until data handling, retention, regional requirements, and controls have been reviewed.
+## Rebuild and deploy
 
-See [docs/FREE-TIER-PLAN.md](docs/FREE-TIER-PLAN.md), [docs/PRODUCTION-FIT.md](docs/PRODUCTION-FIT.md), and [docs/BUILD-STATUS.md](docs/BUILD-STATUS.md) for the detailed scope and checks.
+Local ignored files frontend/.env.local and root .env contain Firebase web settings and the Cloudflare API URL. Do not commit them.
+
+    cd frontend
+    npm ci
+    npm run lint
+    npm run build:static
+
+    cd ../cloudflare/rag-api
+    npm ci
+    npm run typecheck
+    npm run deploy
+
+The deployed Worker serves the static frontend from frontend/out and routes API requests to the same Worker. Firebase Hosting remains available as a fallback. Local Docker users can run docker compose up --build -d from the repository root. Build arguments read Firebase web settings and the Cloudflare API URL from the ignored root .env.
+
+## Project layout
+
+- frontend/ — static Next.js website and Firebase sign-in
+- cloudflare/rag-api/ — authenticated Worker, D1 migrations, Vectorize and Workers AI integration
+- backend/ — original local FastAPI/PostgreSQL/Qdrant service, retained for local development/evaluation
+- docs/BUILD-STATUS.md — deployment and QA evidence
+- docs/DEPLOYMENT.md — rebuild and service notes
+- docs/PRODUCTION-FIT.md — gaps before financial or business-critical use

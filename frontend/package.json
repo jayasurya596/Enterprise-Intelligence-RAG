@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "tsc --noEmit",
-    "build:firebase": "node scripts/build-firebase.mjs"
+    "build:static": "node scripts/build-firebase.mjs",
+    "build:firebase": "npm run build:static"
   },
   "dependencies": {
     "firebase": "^13.2.0",

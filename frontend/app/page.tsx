@@ -15,6 +15,8 @@ import {
 } from "firebase/auth";
 import { addDocument, answerFromWorkspace, Citation, Conversation, createConversation, DocumentItem, listConversations, listDocuments, listMessages, Message, removeDocument, saveMessage } from "./lib/knowledge-store";
 import { firebaseConfigured, getFirebaseClient } from "./lib/firebase-client";
+import { migrateLegacyFirestoreWorkspace } from "./lib/legacy-migration";
+import { cloudflareApiConfigured } from "./lib/cloudflare-client";
 
 export default function Home() {
   const [user, setUser] = useState<User | null>(null);
@@ -34,9 +36,10 @@ export default function Home() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
-  const refresh = useCallback(async (uid: string) => {
+  const refresh = useCallback(async (activeUser: User) => {
     const { db } = getFirebaseClient();
-    const [docs, chats] = await Promise.all([listDocuments(db, uid), listConversations(db, uid)]);
+    await migrateLegacyFirestoreWorkspace(db, activeUser);
+    const [docs, chats] = await Promise.all([listDocuments(activeUser), listConversations(activeUser)]);
     setDocuments(docs);
     setConversations(chats);
   }, []);
@@ -64,7 +67,7 @@ export default function Home() {
     if (!user?.emailVerified) return;
     let cancelled = false;
     setError("");
-    refresh(user.uid).catch((reason: Error) => {
+    refresh(user).catch((reason: Error) => {
       if (!cancelled) setError(reason.message || "Could not load your workspace.");
     });
     return () => { cancelled = true; };
@@ -77,7 +80,7 @@ export default function Home() {
     }
     let cancelled = false;
     const { db } = getFirebaseClient();
-    listMessages(db, user.uid, activeConversation).then((items) => {
+    listMessages(user, activeConversation).then((items) => {
       if (!cancelled) setMessages(items);
     }).catch((reason: Error) => {
       if (!cancelled) setError(reason.message || "Could not load this conversation.");
@@ -168,11 +171,10 @@ export default function Home() {
     if (!user || !file) return;
     setBusy(true); setError(""); setNotice("");
     try {
-      const { db } = getFirebaseClient();
-      const item = await addDocument(db, user.uid, file, uploadDomains.split(","));
+      const item = await addDocument(user, file, uploadDomains.split(","));
       setNotice(`${item.source_name} was extracted and saved to your account.`);
       setFile(null); setUploadDomains("financial");
-      await refresh(user.uid);
+      await refresh(user);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Upload failed.");
     } finally {
@@ -184,9 +186,9 @@ export default function Home() {
     if (!user || !window.confirm(`Delete “${item.source_name}” and its saved searchable text?`)) return;
     setBusy(true); setError(""); setNotice("");
     try {
-      await removeDocument(getFirebaseClient().db, user.uid, item.id);
+      await removeDocument(user, item.id);
       setNotice(`${item.source_name} was deleted.`);
-      await refresh(user.uid);
+      await refresh(user);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Delete failed.");
     } finally {
@@ -203,15 +205,14 @@ export default function Home() {
     }
     setBusy(true); setError(""); setNotice("");
     try {
-      const { db } = getFirebaseClient();
       const prompt = question.trim();
-      const conversationId = activeConversation || await createConversation(db, user.uid, prompt);
+      const conversationId = activeConversation || await createConversation(user, prompt);
       if (!activeConversation) setActiveConversation(conversationId);
-      await saveMessage(db, user.uid, conversationId, "user", prompt);
-      const result = await answerFromWorkspace(db, user.uid, prompt, domains.split(",").map((item) => item.trim()).filter(Boolean));
-      await saveMessage(db, user.uid, conversationId, "assistant", result.answer, result.citations);
+      await saveMessage(user, conversationId, "user", prompt);
+      const result = await answerFromWorkspace(user, prompt, domains.split(",").map((item) => item.trim()).filter(Boolean));
+      await saveMessage(user, conversationId, "assistant", result.answer, result.citations);
       setQuestion("");
-      const [updatedMessages] = await Promise.all([listMessages(db, user.uid, conversationId), refresh(user.uid)]);
+      const [updatedMessages] = await Promise.all([listMessages(user, conversationId), refresh(user)]);
       setMessages(updatedMessages);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Search failed.");
@@ -224,10 +225,10 @@ export default function Home() {
 
   if (loading) return <main className="auth-shell"><div className="auth-card"><p className="eyebrow">PRIVATE KNOWLEDGE WORKSPACE</p><h1>Loading your account…</h1></div></main>;
 
-  if (!firebaseConfigured) return <main className="auth-shell"><div className="auth-card">
-    <div className="brand-mark">EI</div><p className="eyebrow">FIREBASE SETUP REQUIRED</p><h1>Connect your free project.</h1>
-    <p className="muted">The site needs the public Firebase web settings before account creation can work. No API secret belongs in this browser app.</p>
-    <p className="tiny-note">Add the Firebase web app values to <code>frontend/.env.local</code>, enable Email/Password sign-in, create the Spark Firestore database, then build and deploy.</p>
+  if (!firebaseConfigured || !cloudflareApiConfigured) return <main className="auth-shell"><div className="auth-card">
+    <div className="brand-mark">EI</div><p className="eyebrow">BACKEND SETUP REQUIRED</p><h1>Connect your workspace.</h1>
+    <p className="muted">The site needs its Firebase sign-in settings and Cloudflare API address before account creation can work. No private API secret belongs in this browser app.</p>
+    <p className="tiny-note">Add the Firebase web settings and NEXT_PUBLIC_CLOUDFLARE_API_URL to <code>frontend/.env.local</code>, then build and deploy.</p>
   </div></main>;
 
   if (user && !user.emailVerified) return <main className="auth-shell"><div className="auth-card">
@@ -279,7 +280,7 @@ export default function Home() {
             <label className="file-drop"><span className="upload-icon">↑</span><strong>{file ? file.name : "Add a document"}</strong><small>PDF, DOCX, TXT or CSV · 5 MB, 20 chunks max</small><input type="file" accept=".pdf,.docx,.txt,.csv" onChange={(event) => setFile(event.target.files?.[0] || null)} /></label>
             <label className="compact-label">Domains<input placeholder="financial" value={uploadDomains} onChange={(event) => setUploadDomains(event.target.value)} /></label>
             <button className="primary-button" disabled={!file || busy}>{busy ? "Working…" : "Extract and save"}</button>
-            <p className="tiny-note">Extracted text and chats are saved to your Firebase account. Original files are not archived. Limits: 50 documents, 20 chunks each, 50 conversations, and 100 messages per conversation.</p>
+            <p className="tiny-note">Extracted text and chats are stored in your Cloudflare workspace. Search embeddings and generated answers use Cloudflare AI. Original files are not archived. Limits: 50 documents, 20 chunks each, 50 conversations, and 100 messages per conversation.</p>
           </form>
           <div className="document-list">
             {documents.map((item) => <article className="document-row" key={item.id}><div className="file-icon">{item.source_name.toLowerCase().endsWith(".pdf") ? "PDF" : item.source_name.split(".").pop()?.toUpperCase()}</div><div className="document-meta"><strong title={item.source_name}>{item.source_name}</strong><span>{item.chunk_count} chunks · {item.domain_labels.join(", ")}</span>{item.status === "failed" && <small className="error-text">{item.error_summary}</small>}</div><span className={`state state-${item.status}`}>{item.status}</span><button className="delete-button" title="Delete document" onClick={() => deleteDocument(item)}>×</button></article>)}
@@ -291,10 +292,10 @@ export default function Home() {
           <div className="chat-heading"><div><p className="eyebrow">ASK YOUR SOURCES</p><h3>{selectedConversation?.title || "What would you like to know?"}</h3></div><span className="secure-pill">⌑ Source-linked</span></div>
           <div className="messages" aria-live="polite">
             {messages.map((message) => <article key={message.id} className={`message message-${message.role}`}><div className="message-label">{message.role === "user" ? "YOU" : "ASSISTANT"}</div><p className="message-content">{message.content}</p>{message.citations?.length > 0 && <div className="citation-list"><span className="citation-heading">SOURCES</span>{message.citations.map((citation: Citation) => <details className="citation-card" key={citation.chunk_id}><summary><span className="citation-marker">{citation.marker}</span><span>{citation.document_name}{citation.page_number ? ` · page ${citation.page_number}` : ""}</span><span className="chevron">⌄</span></summary><p>{citation.excerpt}</p></details>)}</div>}</article>)}
-            {!messages.length && <div className="welcome-state"><div className="spark">✳</div><h3>Ask across your sources</h3><p>This free prototype ranks stored text by word overlap and shows the matching excerpts. It does not use a paid AI model.</p><div className="suggestion-row"><button onClick={() => setQuestion("What are the key points in my documents?")}>Summarize key points <span>↗</span></button><button onClick={() => setQuestion("Which sources discuss the most important risks?")}>Find risks <span>↗</span></button></div></div>}
+            {!messages.length && <div className="welcome-state"><div className="spark">✳</div><h3>Ask across your sources</h3><p>Cloudflare combines semantic and keyword search, then drafts an answer from your saved sources with citations.</p><div className="suggestion-row"><button onClick={() => setQuestion("What are the key points in my documents?")}>Summarize key points <span>↗</span></button><button onClick={() => setQuestion("Which sources discuss the most important risks?")}>Find risks <span>↗</span></button></div></div>}
           </div>
-          <form className="composer" onSubmit={ask}><label className="domain-filter">Domains<input value={domains} onChange={(event) => setDomains(event.target.value)} placeholder="financial" /></label><div className="composer-box"><textarea maxLength={6000} value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ask a question about your documents…" rows={2} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} /><div className="composer-bottom"><span>Processed in your browser, saved to your account</span><button aria-label="Send question" className="send-button" disabled={!question.trim() || busy}>↑</button></div></div></form>
-          <p className="privacy-footnote">Financial summaries reflect extracted source text and word overlap. They are not financial advice. Email verification links are enabled; phone SMS OTP is not included in this $0 prototype.</p>
+          <form className="composer" onSubmit={ask}><label className="domain-filter">Domains<input value={domains} onChange={(event) => setDomains(event.target.value)} placeholder="financial" /></label><div className="composer-box"><textarea maxLength={6000} value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ask a question about your documents…" rows={2} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} /><div className="composer-bottom"><span>Text sent securely to Cloudflare for retrieval and saved to your account</span><button aria-label="Send question" className="send-button" disabled={!question.trim() || busy}>↑</button></div></div></form>
+          <p className="privacy-footnote">AI answers can be inaccurate. Review the cited source excerpts; this tool does not provide financial advice. Email verification uses a link; numeric email OTP and SMS OTP are not configured.</p>
         </section>
       </div>
     </section>

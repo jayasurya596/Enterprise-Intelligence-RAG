@@ -1,32 +1,59 @@
 # Deployment and data persistence
 
-## Hosted free demo
+## Hosted website
 
-The strict-$0 Firebase demo is live at [https://eirag-rag-261106-a7c9.web.app](https://eirag-rag-261106-a7c9.web.app). It uses Firebase Hosting, Firebase Authentication, and Cloud Firestore on the Spark no-billing plan. The project is `eirag-rag-261106-a7c9`; the Standard Native Firestore `(default)` database is in `asia-south1` (Mumbai). No billing account is attached.
+- Public website and API: [https://enterprise-intelligence-rag-api.penchalajayasuryachappidi.workers.dev](https://enterprise-intelligence-rag-api.penchalajayasuryachappidi.workers.dev)
+- Previous Firebase Hosting address (fallback): [https://eirag-rag-261106-a7c9.web.app](https://eirag-rag-261106-a7c9.web.app)
+- Cloudflare D1: enterprise-intelligence-rag (APAC)
+- Cloudflare Vectorize: enterprise-intelligence-rag-vectors
+- Firebase project: eirag-rag-261106-a7c9
 
-Email/password Authentication is enabled. The app requires a verified email link before workspace access. Firestore rules are deployed and have passed Firebase's compiler plus five simulated read allow/deny cases. A browser smoke check confirmed that the public sign-in and create-account screens render. Registration was not submitted, so real mailbox delivery and signed-in database operations remain unverified.
+## Rebuild and deploy the Cloudflare site and API
 
-### Local rebuild
-
-1. Install Node.js and npm.
-2. Copy `frontend/.env.example` to `frontend/.env.local` and fill the public Firebase Web App values from the project owner’s Firebase Console. The current local values are ignored by Git and excluded from the handoff archive.
-3. From the repository root, run:
+From the repository root, build the static frontend first:
 
     cd frontend
-    npm install
+    npm ci
     npm run lint
-    npm run build:firebase
+    npm run build:static
 
-The source project includes Firebase configuration and rules. Re-deployment requires an authorized Firebase account and Firebase CLI; the live deployment was provisioned through Firebase APIs in this environment. Never put a service-account key in the frontend.
+Then deploy the Worker with the generated frontend assets:
 
-### Data behavior and limits
+    cd ../cloudflare/rag-api
+    npm ci
+    npm run typecheck
+    npm run deploy
 
-Firebase Authentication stores account credentials. Firestore stores extracted document text, metadata, conversation messages, and citations under each authenticated user's UID. Uploaded originals are processed in the browser and are not archived. Deleting a document removes its saved text chunks and metadata.
+The Worker serves the frontend at `/` and the RAG API at `/api/*`. Its readiness endpoint is `/health/ready`.
 
-Firebase email verification sends a link, not a numeric email OTP. Real phone SMS OTP is not included in the no-billing profile. Firestore and Hosting quotas are limited; exhausting a Spark quota can pause service. Avoid confidential financial data until data residency, retention, and security are approved.
+The D1 database and Vectorize index are provisioned. The current schema includes tenant-scoped document, conversation, and message IDs. To apply future schema migrations:
 
-## Original local Docker deployment
+    npx wrangler d1 migrations apply enterprise-intelligence-rag --remote
 
-The legacy local stack consists of the Next.js server app, FastAPI, PostgreSQL, and Qdrant. When Docker Desktop and Compose are available, run `docker compose up --build -d` from the repository root. Its API and web ports bind to loopback; its database, Qdrant, and upload data persist in local Docker volumes. This stack is not the Firebase-hosted demo.
+Keep the existing Worker name and bindings. The Worker URL is configured as NEXT_PUBLIC_CLOUDFLARE_API_URL in ignored local environment files.
 
-The local email/password account flow does not verify email or phone ownership. Production-mode backend startup is intentionally blocked until verified identity is integrated. The old `docker-compose.cloud.yml` is a legacy reference requiring separately provisioned services; it is not a free deployment recipe.
+## Firebase Hosting fallback
+
+The primary site uses Cloudflare Workers static assets. Firebase Hosting remains published as a fallback. To rebuild it, run `npm run build:firebase` and deploy with the Firebase CLI.
+
+Firebase credentials are managed by Firebase Authentication. Never put a service-account key in frontend configuration.
+
+## Data behavior
+
+Firebase Authentication stores sign-in credentials and enforces email verification with a link. The Worker validates signed Firebase ID tokens and uses the UID as the owner key. Cloudflare D1 stores verified profile fields, document text, metadata, conversations, messages, and citations. Vectorize stores embeddings. Workers AI receives source text for embedding and retrieved snippets/questions for answer generation.
+
+The browser extracts PDF, DOCX, TXT, and CSV text. Original uploaded files are not archived. First verified sign-in imports prior Firestore workspace records; Firestore is not deleted. Current-app document deletion removes the D1 text and corresponding Vectorize vectors.
+
+## Local Docker stack
+
+The Docker frontend build receives Firebase web settings and the Cloudflare API URL from root .env. Rebuild with:
+
+    docker compose config --quiet
+    docker compose up --build -d
+    docker compose ps
+
+The original local FastAPI/PostgreSQL/Qdrant backend remains available for local development and evaluation. The hosted Cloudflare-backed website does not use FastAPI for its document/chat data.
+
+## User verification and limitations
+
+The deployed API passed readiness, unauthenticated rejection, and CORS checks. A real verified user session is still needed to verify signup email delivery and full workspace operations. Email verification is link-based, not numeric OTP. Real phone SMS OTP is not configured. Review FREE-TIER-PLAN.md and PRODUCTION-FIT.md before using sensitive financial data.
