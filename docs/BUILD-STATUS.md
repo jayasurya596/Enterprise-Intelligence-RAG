@@ -61,3 +61,16 @@ The AI budget applies to this app only and cannot see requests from other Worker
 A real email address and mailbox OTP were not used, so actual code delivery and sign-in have not been proven. After you sign in with your own email code, verify that the workspace opens and that a document can be uploaded, searched, and deleted. Do not send the OTP code in chat.
 
 This is ready for a controlled demonstration after the real inbox acceptance check. It is not ready for confidential or business-critical financial workloads. Security certification, abuse/load testing, financial-answer benchmarking, backups, and restore exercises remain incomplete.
+
+
+## Recheck on 11 November 2026
+
+- Frontend TypeScript check and static production build: passed.
+- Cloudflare Worker typecheck and Wrangler dry run: passed.
+- Backend pytest suite: 16 passed; one Starlette/httpx deprecation warning.
+- Local Docker Compose configuration parsed successfully. The separate cloud compose template requires actual image, database, Qdrant, secret, volume, and ingress values and was not deployed.
+- The live Worker redirected an unauthenticated request to Cloudflare Access; the email sign-in page returned HTTP 200.
+- A read-only query of remote D1 returned 0 users, 0 documents, and 0 conversations.
+- No real mailbox PIN or signed-in upload/search/delete run was completed.
+
+**Readiness decision:** the Cloudflare application is deployed for a controlled demo. The live email sign-in and document workflow still need user acceptance. The app is not certified for production financial data.
