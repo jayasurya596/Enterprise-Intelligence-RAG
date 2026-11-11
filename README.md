@@ -69,4 +69,6 @@ For local Access simulation, Wrangler has a development identity in its config. 
 - docs/DEPLOYMENT.md — rebuild and service notes
 - docs/FREE-TIER-PLAN.md — cost and free-tier notes
 - docs/PRODUCTION-FIT.md — gaps before financial or business-critical use
+- docs/PROJECT-DOCUMENTATION.md — full architecture, data flow, API, setup, and verification manual
+- docs/INTERVIEW-GUIDE.md — interview pitch, demo outline, and likely questions
 - docs/PROJECT-AND-INTERVIEW-GUIDE.md — project overview and interviewer preparation
