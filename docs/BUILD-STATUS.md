@@ -24,7 +24,7 @@ Cloudflare Access is restricted to the One-time PIN identity provider. The polic
 - Workers AI uses BGE Small embeddings and Llama 3.3 70B FP8 Fast. If AI inference or the app budget is unavailable, the API falls back to source excerpts/keyword retrieval.
 - File parsing remains in the browser. Extracted text goes to Cloudflare; original files are not archived.
 - The older Firebase Hosting copy and legacy Firebase-token verification remain in the repository for compatibility, but they are not the current hosted login flow.
-- Old Firestore-only content is not automatically imported by Access sign-in. D1 was empty at initial deployment; the later 2026-11-11 count was 1 user, 0 documents, and 1 conversation.
+- Old Firestore-only content is not automatically imported by Access sign-in. D1 was empty at initial deployment; the later 2026-11-11 count was 1 user, 0 documents, 1 conversation, 2 messages, and 2 messages.
 
 ## Application limits
 
@@ -53,12 +53,12 @@ The AI budget applies to this app only and cannot see requests from other Worker
 - Live Access login page: HTTP 200; email and code-related text present.
 - Live unauthenticated /api/me: HTTP 302 to Access login.
 - Access application check: self-hosted app on the Worker hostname, one-time PIN provider only, allow-everyone policy.
-- Current D1 aggregate counts on 2026-11-11: 1 user, 0 documents, 1 conversation.
+- Current D1 aggregate counts on 2026-11-11: 1 user, 0 documents, 1 conversation, 2 messages.
 - Existing Cloudflare Access app for Telecom Churn was not modified.
 
 ## Live user acceptance and remaining checks
 
-The project owner reports successfully signing in with email and receiving answers from the live app. The latest read-only D1 count shows 1 user, 0 documents, and 1 conversation. This confirms workspace/chat activity but does not confirm document ingestion or a source-grounded answer. Upload a small TXT/PDF, verify its citation, delete it, and test a second account for isolation. Do not share email PINs in chat.
+The project owner reports successfully signing in with email and receiving answers from the live app. The latest read-only D1 count shows 1 user, 0 documents, 1 conversation, 2 messages, and 2 messages. This confirms workspace/chat activity but does not confirm document ingestion or a source-grounded answer. Upload a small TXT/PDF, verify its citation, delete it, and test a second account for isolation. Do not share email PINs in chat.
 
 The Cloudflare app is available for a controlled demonstration. It is not certified for confidential or business-critical financial workloads. Security review, abuse/load testing, financial-answer benchmarking, backups, and restore exercises remain incomplete.
 
@@ -70,7 +70,7 @@ The Cloudflare app is available for a controlled demonstration. It is not certif
 - Backend pytest suite: 16 passed; one Starlette/httpx deprecation warning.
 - Local Docker Compose configuration parsed successfully. The separate cloud compose template requires actual image, database, Qdrant, secret, volume, and ingress values and was not deployed.
 - The live Worker redirected an unauthenticated request to Cloudflare Access; the email sign-in page returned HTTP 200.
-- A read-only query of remote D1 returned 1 user, 0 documents, and 1 conversation.
+- A read-only query of remote D1 returned 1 user, 0 documents, 1 conversation, 2 messages, and 2 messages.
 - The project owner reports that email sign-in succeeds and the app returns answers. Since D1 has no document rows, document-grounded retrieval/citation and delete acceptance remain unverified.
 
 **Readiness decision:** the Cloudflare application is deployed for a controlled demo and its owner reports successful sign-in and answers. A document upload/search/citation/delete check and live two-user isolation check remain. The app is not certified for production financial data.

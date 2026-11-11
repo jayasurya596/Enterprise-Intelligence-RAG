@@ -26,7 +26,7 @@ The Worker validates the Access assertion's signature, issuer, audience, and exp
 
 The Access policy currently allows everyone. Any person who controls a real email inbox can receive a code and create a separate workspace. If access should be limited to an interviewer or a team, change the policy to specific email addresses or an approved domain.
 
-The old Firebase Hosting copy is a legacy page and is not the supported sign-in site. Firestore-only content is not automatically copied by Cloudflare Access. The latest read-only D1 count on 2026-11-11 was 1 user, 0 documents, and 1 conversation; no Cloudflare document upload was present then.
+The old Firebase Hosting copy is a legacy page and is not the supported sign-in site. Firestore-only content is not automatically copied by Cloudflare Access. The latest read-only D1 count on 2026-11-11 was 1 user, 0 documents, 1 conversation, 2 messages, and 2 messages; no Cloudflare document upload was present then.
 
 ## Application limits
 
@@ -48,7 +48,7 @@ Workers AI, D1, and Vectorize have finite included quotas. The app's AI budget a
 
 ## Email OTP behavior
 
-Cloudflare Access sends a numeric one-time PIN to an email address allowed by the policy. A PIN is single-use, and a new PIN invalidates the previous one. The project owner reports successful email sign-in and answers. The latest D1 count was 1 user, 0 documents, and 1 conversation, so document ingestion and cited retrieval still need acceptance.
+Cloudflare Access sends a numeric one-time PIN to an email address allowed by the policy. A PIN is single-use, and a new PIN invalidates the previous one. The project owner reports successful email sign-in and answers. The latest D1 count was 1 user, 0 documents, 1 conversation, 2 messages, and 2 messages, so document ingestion and cited retrieval still need acceptance.
 
 No phone OTP is configured. Cloudflare Access emails codes to the original address typed by the user, so this setup does not need a custom email domain.
 

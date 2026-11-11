@@ -8,7 +8,7 @@ Enterprise Intelligence RAG is a document question-answering workspace. A user s
 
 The deployed demonstration uses Cloudflare Workers for the site and API, Cloudflare Access for email sign-in, D1 for workspace records and extracted text, Vectorize for embeddings, and Workers AI for embeddings and answer generation. A separate FastAPI/PostgreSQL/Qdrant implementation remains in the repository for local development and evaluation.
 
-**The project is deployed for a controlled demonstration. It is not certified for confidential, regulated, or business-critical financial work.** The project owner reports successful email sign-in and answers. A read-only D1 count shows 1 user, 0 documents, and 1 conversation, so document-grounded RAG has not yet been confirmed.
+**The project is deployed for a controlled demonstration. It is not certified for confidential, regulated, or business-critical financial work.** The project owner reports successful email sign-in and answers. A read-only D1 count shows 1 user, 0 documents, 1 conversation, 2 messages, and 2 messages, so document-grounded RAG has not yet been confirmed.
 
 ## Interview pitch
 
@@ -50,7 +50,7 @@ Cloudflare Access performs email verification. The Worker verifies the signed Ac
 
 The verified email is normalized and mapped to a stable D1 user record. D1 reads and writes filter records by that user ID. Vectorize searches include an owner filter, and returned vector IDs are resolved through D1 rows belonging to the same owner before their text can be used as evidence.
 
-Local tests exercise user isolation, but a live two-account browser test has not been completed. Firebase compatibility code remains in the repository. Cloudflare Access sign-in does not automatically import old Firestore-only records. The latest D1 count is 1 user, 0 documents, and 1 conversation.
+Local tests exercise user isolation, but a live two-account browser test has not been completed. Firebase compatibility code remains in the repository. Cloudflare Access sign-in does not automatically import old Firestore-only records. The latest D1 count is 1 user, 0 documents, 1 conversation, 2 messages, and 2 messages.
 
 ## Document ingestion
 
@@ -91,7 +91,7 @@ Daily AI limits are shared across all users of this app: 250,000 embedding input
 | messages | Owner, conversation, role, content, citations, timestamp |
 | daily_ai_usage | Per-day app-wide embedding and generation counters |
 
-Original file bytes are not stored in D1 or an object bucket. Extracted text is kept to support later search; embeddings are kept in Vectorize. D1 is in Cloudflare’s APAC region. A read-only count check on 11 November 2026 returned 1 user, 0 documents, and 1 conversation.
+Original file bytes are not stored in D1 or an object bucket. Extracted text is kept to support later search; embeddings are kept in Vectorize. D1 is in Cloudflare’s APAC region. A read-only count check on 11 November 2026 returned 1 user, 0 documents, 1 conversation, 2 messages, and 2 messages.
 
 ## Main Worker API routes
 
@@ -151,7 +151,7 @@ Rechecked 11 November 2026:
 - Backend test suite: 16 passed, with one Starlette/httpx deprecation warning.
 - Local Docker Compose configuration validation: passed.
 - Live Worker redirects unauthenticated visitors to Cloudflare Access; the login page returned HTTP 200.
-- Remote D1 counts: 1 user, 0 documents, 1 conversation.
+- Remote D1 counts: 1 user, 0 documents, 1 conversation, 2 messages.
 - The project owner reports successful email sign-in and answers. Document upload/indexing, source citations, deletion, and live two-user isolation were not confirmed.
 - Cloud Docker compose has required deployment values and was not deployed. Configuration validation is not a full container build or runtime test.
 
@@ -172,7 +172,7 @@ Rechecked 11 November 2026:
 
 ### User acceptance still needed to verify document-grounded RAG
 
-The owner reports that sign-in works and the app returns answers. The latest D1 count has 1 user and 1 conversation but no documents, so it does not show that a source file has been indexed in this Cloudflare workspace.
+The owner reports that sign-in works and the app returns answers. The latest D1 count has 1 user, 1 conversation, 2 messages, and no documents, so it does not show that a source file has been indexed in this Cloudflare workspace.
 
 1. Upload a small searchable PDF or TXT file, ask a question whose answer is in it, and inspect the citation.
 2. Delete the test document and confirm it disappears.

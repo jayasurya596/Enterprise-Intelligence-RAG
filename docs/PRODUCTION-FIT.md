@@ -30,7 +30,7 @@ This is **not production-ready for confidential or business-critical financial d
 
 The frontend typecheck and Access-mode static build pass. The Worker typecheck and Wrangler dry run pass. Local Access simulation verified D1 identity creation, conversation/message persistence, owner isolation, and rejection of a malformed Access assertion. The deployed Worker redirects unauthenticated requests to Cloudflare Access, and the Access login page responds HTTP 200. The Access application has a single One-time PIN identity provider and an allow-everyone policy.
 
-The project owner reports successful email sign-in and answers. A later read-only D1 count showed 1 user, 0 documents, and 1 conversation. This confirms workspace/chat activity, but not document upload, extraction, indexing, cited retrieval, deletion, or multi-user isolation.
+The project owner reports successful email sign-in and answers. A later read-only D1 count showed 1 user, 0 documents, 1 conversation, 2 messages, and 2 messages. This confirms workspace/chat activity, but not document upload, extraction, indexing, cited retrieval, deletion, or multi-user isolation.
 
 ## Required before production use
 
