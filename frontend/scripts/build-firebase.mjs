@@ -3,16 +3,19 @@ import nextEnv from "@next/env";
 const { loadEnvConfig } = nextEnv;
 
 loadEnvConfig(process.cwd(), true);
-const required = [
-  "NEXT_PUBLIC_FIREBASE_API_KEY",
-  "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN",
-  "NEXT_PUBLIC_FIREBASE_PROJECT_ID",
-  "NEXT_PUBLIC_FIREBASE_APP_ID",
-  "NEXT_PUBLIC_CLOUDFLARE_API_URL",
-];
+const authMode = process.env.NEXT_PUBLIC_AUTH_MODE?.trim() || "cloudflare-access";
+const required = ["NEXT_PUBLIC_CLOUDFLARE_API_URL"];
+if (authMode !== "cloudflare-access") {
+  required.push(
+    "NEXT_PUBLIC_FIREBASE_API_KEY",
+    "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN",
+    "NEXT_PUBLIC_FIREBASE_PROJECT_ID",
+    "NEXT_PUBLIC_FIREBASE_APP_ID",
+  );
+}
 const missing = required.filter((name) => !process.env[name]);
 if (missing.length) {
-  console.error(`Missing Firebase web settings: ${missing.join(", ")}. Copy .env.example to .env.local and fill them from Firebase Console.`);
+  console.error(`Missing settings for ${authMode} authentication: ${missing.join(", ")}. Update .env.local before building.`);
   process.exit(1);
 }
 

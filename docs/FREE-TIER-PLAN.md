@@ -3,38 +3,54 @@
 ## Selected profile
 
 - Domain: financial
-- Website: Cloudflare Worker static assets
-- Identity: Firebase Authentication email/password with verification link
+- Website: Cloudflare Worker static assets, protected by Cloudflare Access
+- Sign-in: Cloudflare Access One-time PIN to email
 - Workspace backend: Cloudflare Workers, D1, Vectorize, and Workers AI
-- Spend goal: minimize cost and stay within included allowances where possible; not a guaranteed $0 account
-- Website and Worker: deployed
-- Original Docker/FastAPI/PostgreSQL/Qdrant stack: retained for local development
+- Spend goal: use free tiers and included allowances; not a guaranteed $0 invoice
+- Custom domain: not required
+- SMS: intentionally omitted to keep the setup email-only and cost-free
 
 ## Cloud services
 
 | Function | Service | Data |
 |---|---|---|
-| Static site and API | Cloudflare Workers | Public client files and authenticated API routes |
-| Sign-in credentials | Firebase Authentication | Email, password credential, verification status |
-| Workspace profile | Cloudflare D1 | Firebase UID and verified email |
+| Site, API, and edge gate | Cloudflare Workers and Access | Static assets, API routing, verified email session |
+| Email login | Cloudflare Access One-time PIN | Email address and Access session; no app password |
+| Workspace profile | Cloudflare D1 | Normalized email and stable workspace owner ID |
 | Workspace content | Cloudflare D1 | Extracted document text, metadata, chats, messages, citations |
-| Semantic retrieval | Cloudflare Vectorize | 384-dimensional embeddings plus owner/document/chunk metadata |
+| Semantic retrieval | Cloudflare Vectorize | 384-dimensional embeddings and owner/document/chunk metadata |
 | Embeddings and answers | Workers AI | Document/query embeddings and retrieved answer context |
 | Original files | Browser only | Not archived |
 
-On first verified sign-in, any old Firestore workspace records are copied to D1 and Vectorize. Firestore is kept as the migration source. The Worker never receives or stores a password. Firebase Authentication remains the identity provider to preserve existing accounts; the site and RAG backend now run on Cloudflare.
+The Worker validates the Access assertion's signature, issuer, audience, and expiry. On the first signed-in API request it creates a D1 profile row. When a previous D1 profile has the same email, the Worker reuses its owner ID. The new Access flow does not require Firebase passwords.
 
-## Limits and cost control
+The Access policy currently allows everyone. Any person who controls a real email inbox can receive a code and create a separate workspace. If access should be limited to an interviewer or a team, change the policy to specific email addresses or an approved domain.
 
-The app enforces 50 documents, 20 chunks/document, 1,000 total chunks, 50 conversations, 100 messages/conversation, and the file extraction limits of 5 MB and 40,000 characters.
+The old Firebase Hosting copy is a legacy page and is not the supported sign-in site. Firestore-only content is not automatically copied by Cloudflare Access. The remote D1 database had 0 users, documents, and conversations when checked on 2026-11-11.
 
-The Worker uses BGE Small embeddings and the currently listed Llama 3.3 70B FP8 Fast answer model. It tracks an application-wide daily AI budget: 250,000 embedding input characters, 50,000 generation input characters, and 5,000 reserved output tokens. If a budget is reached, answer generation falls back to source excerpts; indexing reports a limit error until the next UTC day.
+## Application limits
 
-Cloudflare's published Workers AI allowance is 10,000 neurons/account/day; on Workers Paid, usage above that is billed. The app budget cannot see usage from other Workers on the same account, so it cannot promise a $0 invoice by itself. D1 and Vectorize also have finite included quotas. Review [Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/), [D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/), and [Vectorize pricing](https://developers.cloudflare.com/vectorize/platform/pricing/), and monitor Cloudflare account usage before broad sharing.
+- 5 MB maximum file
+- 40,000 extracted characters per file
+- 20 chunks per document
+- 50 documents and 1,000 chunks per account
+- 50 conversations per account
+- 100 messages per conversation
+- Daily app AI budget: 250,000 embedding input characters, 50,000 generation input characters, and 5,000 reserved output tokens; resets at 00:00 UTC
 
-## Verification and OTP
+When an AI budget is reached, answer generation falls back to source excerpts; indexing reports a limit error until the next UTC day.
 
-Firebase sends an email verification link to the actual email address. Numeric email OTP and real phone SMS OTP are not active. Cloudflare Email Service requires a domain configured with Cloudflare DNS, and no domain was available during setup. SMS needs a separate provider. Adding these exact OTP methods requires provider configuration and may add cost.
+## Free-tier and cost notes
+
+Cloudflare Zero Trust Free supports up to 50 users. Cloudflare's setup guide says its Free plan is not charged, but onboarding may ask for payment details. Review the plan shown in your account before sharing broadly.
+
+Workers AI, D1, and Vectorize have finite included quotas. The app's AI budget applies only to this Worker and cannot see usage from other Cloudflare services in the account. If the account is on a paid plan or exceeds included limits, charges may apply. Monitor the account-level usage dashboard. See [Cloudflare Zero Trust plans](https://www.cloudflare.com/plans/zero-trust-services/), [Cloudflare One setup](https://developers.cloudflare.com/cloudflare-one/setup/), [Workers AI pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/), [D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/), and [Vectorize pricing](https://developers.cloudflare.com/vectorize/platform/pricing/).
+
+## Email OTP behavior
+
+Cloudflare Access sends a numeric one-time PIN to an email address allowed by the policy. A PIN is single-use, and a new PIN invalidates the previous one. The login page is live and reachable. A real inbox code has not yet been requested or verified in this handoff, so delivery still needs acceptance testing.
+
+No phone OTP is configured. Cloudflare Access emails codes to the original address typed by the user, so this setup does not need a custom email domain.
 
 ## Data location and limitations
 
@@ -42,6 +58,6 @@ Cloudflare created D1 in APAC. This is not a financial-data residency or complia
 
 ## Local configuration
 
-frontend/.env.local and root .env are local ignored files. They contain public Firebase web settings and the Cloudflare Worker URL; they do not contain a Firebase service-account private key. Do not commit them.
+frontend/.env.local contains the public Worker URL and the selected auth mode. Root .env contains local settings and a private provisioning token. Both files are ignored by Git and must remain private. Do not put the API token in a browser variable or Docker frontend build argument.
 
 See DEPLOYMENT.md for rebuild steps.

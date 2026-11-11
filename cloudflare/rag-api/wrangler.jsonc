@@ -4,9 +4,17 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-11-09",
   "observability": { "enabled": true },
+  "access": {
+    "dev": {
+      "aud": "local-development-audience",
+      "identity": { "email": "local-user@example.invalid" }
+    }
+  },
   "vars": {
     "FIREBASE_PROJECT_ID": "eirag-rag-261106-a7c9",
-    "FRONTEND_ORIGINS": "https://enterprise-intelligence-rag-api.penchalajayasuryachappidi.workers.dev,https://eirag-rag-261106-a7c9.web.app,http://localhost:3000"
+    "FRONTEND_ORIGINS": "https://enterprise-intelligence-rag-api.penchalajayasuryachappidi.workers.dev,https://eirag-rag-261106-a7c9.web.app,http://localhost:3000",
+    "ACCESS_TEAM_DOMAIN": "floral-waterfall-2ff2.cloudflareaccess.com",
+    "ACCESS_APP_AUD": "c9c58b6ce376897ee58705c45d0520ea3492563cd76cc73dcdee160d45870a72"
   },
   "d1_databases": [
     {

@@ -2,58 +2,69 @@
 
 ## Hosted website
 
-- Public website and API: [https://enterprise-intelligence-rag-api.penchalajayasuryachappidi.workers.dev](https://enterprise-intelligence-rag-api.penchalajayasuryachappidi.workers.dev)
-- Previous Firebase Hosting address (fallback): [https://eirag-rag-261106-a7c9.web.app](https://eirag-rag-261106-a7c9.web.app)
-- Cloudflare D1: enterprise-intelligence-rag (APAC)
+- Secure website and API: [https://enterprise-intelligence-rag-api.penchalajayasuryachappidi.workers.dev](https://enterprise-intelligence-rag-api.penchalajayasuryachappidi.workers.dev)
+- Cloudflare Access team domain: floral-waterfall-2ff2.cloudflareaccess.com
+- Cloudflare D1: enterprise-intelligence-rag, APAC
 - Cloudflare Vectorize: enterprise-intelligence-rag-vectors
-- Firebase project: eirag-rag-261106-a7c9
+- Firebase project: eirag-rag-261106-a7c9, retained for legacy compatibility
+
+Cloudflare Access protects all routes on the Worker URL, including assets, API, and readiness. An unauthenticated browser is redirected to Cloudflare Access. The readiness endpoint is therefore not a public health check.
+
+The Access application is named Enterprise Intelligence RAG - Email OTP. It uses the existing One-time PIN identity provider, automatically sends users to email-code sign-in, and has an allow-everyone policy. This permits any real email address to create its own isolated workspace. To make the site private to a smaller group, replace the policy with an email list or an approved email domain.
 
 ## Rebuild and deploy the Cloudflare site and API
 
-From the repository root, build the static frontend first:
+From the repository root, make sure frontend/.env.local has the Worker URL and Access mode:
 
-    cd frontend
-    npm ci
-    npm run lint
-    npm run build:static
+~~~text
+NEXT_PUBLIC_AUTH_MODE=cloudflare-access
+NEXT_PUBLIC_CLOUDFLARE_API_URL=https://enterprise-intelligence-rag-api.penchalajayasuryachappidi.workers.dev
+~~~
 
-Then deploy the Worker with the generated frontend assets:
+Build the frontend first:
 
-    cd ../cloudflare/rag-api
-    npm ci
-    npm run typecheck
-    npm run deploy
+~~~text
+cd frontend
+npm ci
+npm run lint
+npm run build:static
+~~~
 
-The Worker serves the frontend at `/` and the RAG API at `/api/*`. Its readiness endpoint is `/health/ready`.
+Then deploy the Worker and assets:
 
-The D1 database and Vectorize index are provisioned. The current schema includes tenant-scoped document, conversation, and message IDs. To apply future schema migrations:
+~~~text
+cd ../cloudflare/rag-api
+npm ci
+npm run typecheck
+npm run deploy
+~~~
 
-    npx wrangler d1 migrations apply enterprise-intelligence-rag --remote
+Keep the Access team domain and audience tag in wrangler.jsonc aligned with the Access app. If the Access app is deleted and recreated, its audience tag changes and the Worker must be redeployed with the new tag.
 
-Keep the existing Worker name and bindings. The Worker URL is configured as NEXT_PUBLIC_CLOUDFLARE_API_URL in ignored local environment files.
+Apply future schema migrations with:
 
-## Firebase Hosting fallback
+~~~text
+npx wrangler d1 migrations apply enterprise-intelligence-rag --remote
+~~~
 
-The primary site uses Cloudflare Workers static assets. Firebase Hosting remains published as a fallback. To rebuild it, run `npm run build:firebase` and deploy with the Firebase CLI.
+The root .env contains a provisioning API token and must never be committed or copied into frontend configuration. The token is not needed by the deployed Worker at runtime.
 
-Firebase credentials are managed by Firebase Authentication. Never put a service-account key in frontend configuration.
+## Authentication and data behavior
 
-## Data behavior
+Cloudflare Access sends a one-time PIN to the user's email. The policy allows every email address, so the first successful sign-in creates a D1 profile row. The Worker validates the Access assertion and keys the workspace by normalized email. If a matching D1 profile from the old Firebase-token flow exists, its owner ID is reused.
 
-Firebase Authentication stores sign-in credentials and enforces email verification with a link. The Worker validates signed Firebase ID tokens and uses the UID as the owner key. Cloudflare D1 stores verified profile fields, document text, metadata, conversations, messages, and citations. Vectorize stores embeddings. Workers AI receives source text for embedding and retrieved snippets/questions for answer generation.
+The browser extracts PDF, DOCX, TXT, and CSV text. Original uploaded files are not archived. D1 stores extracted text, document metadata, conversations, messages, and citations. Vectorize stores embeddings. Workers AI receives document text for embeddings and retrieved excerpts/questions for answer generation. Deleting a document removes its D1 text and its Vectorize vectors.
 
-The browser extracts PDF, DOCX, TXT, and CSV text. Original uploaded files are not archived. First verified sign-in imports prior Firestore workspace records; Firestore is not deleted. Current-app document deletion removes the D1 text and corresponding Vectorize vectors.
+The older Firebase Hosting address remains published as a legacy copy; it is not the current Cloudflare Access sign-in route. Old Firestore-only records are not imported by the Access flow. At deployment, the Cloudflare D1 database had 0 users, documents, and conversations.
 
-## Local Docker stack
+## Local development and Docker
 
-The Docker frontend build receives Firebase web settings and the Cloudflare API URL from root .env. Rebuild with:
+Wrangler config includes a fake local Access identity, local-user@example.invalid. To use it, run Wrangler with ACCESS_APP_AUD set to local-development-audience. Do not use this simulated identity in production.
 
-    docker compose config --quiet
-    docker compose up --build -d
-    docker compose ps
+The Docker compose file starts the original FastAPI/PostgreSQL/Qdrant stack. It is a separate local-development/evaluation path; the hosted Cloudflare website uses the Worker, D1, Vectorize, and Workers AI.
 
-The original local FastAPI/PostgreSQL/Qdrant backend remains available for local development and evaluation. The hosted Cloudflare-backed website does not use FastAPI for its document/chat data.
+## QA status
 
-## User verification and limitations
+The frontend typecheck and static build pass. The Worker typecheck and Wrangler dry run pass. Local tests exercised a simulated Access identity, D1 profile creation, conversation/message persistence, separate-user isolation, and rejection of a malformed Access JWT.
 
-The deployed API passed readiness, unauthenticated rejection, and CORS checks. A real verified user session is still needed to verify signup email delivery and full workspace operations. Email verification is link-based, not numeric OTP. Real phone SMS OTP is not configured. Review FREE-TIER-PLAN.md and PRODUCTION-FIT.md before using sensitive financial data.
+The live website redirects unauthenticated visitors to the Cloudflare email OTP login page. The page responds successfully, but a real OTP email delivery and signed-in workspace flow still need a user's mailbox acceptance test. The Firebase Hosting copy does not provide the current Cloudflare Access flow.

@@ -7,6 +7,8 @@ type Env = {
   ASSETS: Fetcher;
   FIREBASE_PROJECT_ID: string;
   FRONTEND_ORIGINS: string;
+  ACCESS_TEAM_DOMAIN?: string;
+  ACCESS_APP_AUD?: string;
 };
 
 type Citation = {
@@ -30,6 +32,7 @@ type ChunkRow = {
 };
 
 const jwks = createRemoteJWKSet(new URL("https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com"));
+const accessJwks = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
 const EMBEDDING_MODEL = "@cf/baai/bge-small-en-v1.5";
 const GENERATION_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 const MAX_DOCUMENTS = 50;
@@ -69,6 +72,7 @@ function jsonResponse(request: Request, env: Env, body: unknown, status = 200): 
   const allowed = env.FRONTEND_ORIGINS.split(",").map((item) => item.trim()).filter(Boolean);
   if (origin && allowed.includes(origin)) {
     headers.set("Access-Control-Allow-Origin", origin);
+    headers.set("Access-Control-Allow-Credentials", "true");
     headers.set("Vary", "Origin");
     headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
     headers.set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
@@ -85,7 +89,61 @@ async function readJson(request: Request, maxBytes = 2_500_000): Promise<Record<
   if (!object(value)) throw new HttpError(400, "The request body must be a JSON object.");
   return value;
 }
-async function requireUser(request: Request, env: Env): Promise<{ uid: string; email: string }> {
+async function persistAccessUser(env: Env, rawEmail: unknown): Promise<{ uid: string; email: string }> {
+  if (typeof rawEmail !== "string" || rawEmail.length > 320) throw new HttpError(403, "Use a verified email address to continue.");
+  const email = rawEmail.trim().toLowerCase();
+  if (!email || /\s/.test(email)) throw new HttpError(403, "Use a verified email address to continue.");
+  const existing = await env.DB.prepare("SELECT uid FROM users WHERE lower(email) = lower(?) ORDER BY created_at LIMIT 1")
+    .bind(email).first<{ uid: string }>();
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(email));
+  const stableUid = "access_" + Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  const uid = existing?.uid || stableUid;
+  const current = now();
+  await env.DB.prepare("INSERT INTO users (uid, email, email_verified, created_at, updated_at) VALUES (?, ?, 1, ?, ?) ON CONFLICT(uid) DO UPDATE SET email = excluded.email, email_verified = 1, updated_at = excluded.updated_at")
+    .bind(uid, email, current, current).run();
+  return { uid, email };
+}
+async function requireUser(request: Request, env: Env, access?: CloudflareAccessContext): Promise<{ uid: string; email: string }> {
+  const accessAssertion = request.headers.get("Cf-Access-Jwt-Assertion");
+  if (access && !accessAssertion) {
+    if (!env.ACCESS_APP_AUD || access.aud !== env.ACCESS_APP_AUD) throw new HttpError(401, "Your Cloudflare email sign-in is not valid for this workspace.");
+    try {
+      const identity = await access.getIdentity();
+      return await persistAccessUser(env, identity?.email);
+    } catch (error) {
+      if (error instanceof HttpError) throw error;
+      throw new HttpError(401, "Your Cloudflare email sign-in has expired or is invalid. Sign in again.");
+    }
+  }
+
+  if (accessAssertion) {
+    const teamDomain = (env.ACCESS_TEAM_DOMAIN || "").trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "").toLowerCase();
+    const audience = (env.ACCESS_APP_AUD || "").trim();
+    if (!/^[a-z0-9-]+\.cloudflareaccess\.com$/.test(teamDomain) || !audience) {
+      throw new HttpError(503, "Cloudflare email sign-in is not configured for this workspace.");
+    }
+    try {
+      let remoteKeys = accessJwks.get(teamDomain);
+      if (!remoteKeys) {
+        remoteKeys = createRemoteJWKSet(new URL("https://" + teamDomain + "/cdn-cgi/access/certs"));
+        accessJwks.set(teamDomain, remoteKeys);
+      }
+      const verified = await jwtVerify(accessAssertion, remoteKeys, {
+        issuer: "https://" + teamDomain,
+        audience,
+        algorithms: ["RS256"],
+      });
+      const subject = verified.payload.sub;
+      if (typeof subject !== "string" || !subject) {
+        throw new HttpError(403, "Use a verified email address to continue.");
+      }
+      return await persistAccessUser(env, verified.payload.email);
+    } catch (error) {
+      if (error instanceof HttpError) throw error;
+      throw new HttpError(401, "Your Cloudflare email sign-in has expired or is invalid. Sign in again.");
+    }
+  }
+
   const authorization = request.headers.get("Authorization") || "";
   if (!authorization.startsWith("Bearer ")) throw new HttpError(401, "Sign in with a verified email to continue.");
   try {
@@ -308,7 +366,7 @@ async function searchAndAnswer(env: Env, uid: string, body: Record<string, unkno
   } catch { /* return source excerpts when the free AI allowance is unavailable */ }
   return { answer, citations };
 }
-async function dispatch(request: Request, env: Env): Promise<Response> {
+async function dispatch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const url = new URL(request.url);
   const method = request.method.toUpperCase();
   if (!url.pathname.startsWith("/api/") && url.pathname !== "/health/ready") {
@@ -330,7 +388,10 @@ async function dispatch(request: Request, env: Env): Promise<Response> {
     await env.DB.prepare("SELECT 1").first();
     return jsonResponse(request, env, { status: "ready", service: "enterprise-intelligence-rag-api" });
   }
-  const user = await requireUser(request, env);
+  const user = await requireUser(request, env, ctx.access);
+  if (method === "GET" && url.pathname === "/api/me") {
+    return jsonResponse(request, env, { uid: user.uid, email: user.email, email_verified: true });
+  }
   if (method === "GET" && url.pathname === "/api/migrations/status") {
     const row = await env.DB.prepare("SELECT legacy_imported FROM users WHERE uid = ?").bind(user.uid).first<{ legacy_imported: number }>();
     return jsonResponse(request, env, { legacy_imported: Number(row?.legacy_imported || 0) === 1 });
@@ -362,9 +423,9 @@ async function dispatch(request: Request, env: Env): Promise<Response> {
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     try {
-      return await dispatch(request, env);
+      return await dispatch(request, env, ctx);
     } catch (error) {
       if (error instanceof HttpError) return jsonResponse(request, env, { error: error.message }, error.status);
       return jsonResponse(request, env, { error: "The service could not complete this request. Please try again." }, 500);

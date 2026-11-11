@@ -16,10 +16,10 @@ import {
 import { addDocument, answerFromWorkspace, Citation, Conversation, createConversation, DocumentItem, listConversations, listDocuments, listMessages, Message, removeDocument, saveMessage } from "./lib/knowledge-store";
 import { firebaseConfigured, getFirebaseClient } from "./lib/firebase-client";
 import { migrateLegacyFirestoreWorkspace } from "./lib/legacy-migration";
-import { cloudflareApiConfigured } from "./lib/cloudflare-client";
+import { cloudflareAccessMode, cloudflareApiConfigured, cloudflareApiUrl, cloudflareRequest, type WorkspaceUser } from "./lib/cloudflare-client";
 
 export default function Home() {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<WorkspaceUser | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [registering, setRegistering] = useState(false);
@@ -36,15 +36,38 @@ export default function Home() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
-  const refresh = useCallback(async (activeUser: User) => {
-    const { db } = getFirebaseClient();
-    await migrateLegacyFirestoreWorkspace(db, activeUser);
+  const refresh = useCallback(async (activeUser: WorkspaceUser) => {
+    if (activeUser.getIdToken && activeUser.authProvider !== "cloudflare-access") {
+      const { db } = getFirebaseClient();
+      await migrateLegacyFirestoreWorkspace(db, activeUser as User);
+    }
     const [docs, chats] = await Promise.all([listDocuments(activeUser), listConversations(activeUser)]);
     setDocuments(docs);
     setConversations(chats);
   }, []);
 
   useEffect(() => {
+    if (cloudflareAccessMode) {
+      try {
+        const appOrigin = new URL(cloudflareApiUrl).origin;
+        const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+        if (!isLocal && window.location.origin !== appOrigin) {
+          window.location.replace(appOrigin);
+          setLoading(false);
+          return;
+        }
+      } catch { /* The setup panel reports invalid configuration. */ }
+      let cancelled = false;
+      cloudflareRequest<{ uid: string; email: string }>(null, "/api/me")
+        .then((identity) => {
+          if (!cancelled) setUser({ uid: identity.uid, email: identity.email, emailVerified: true, authProvider: "cloudflare-access" });
+        })
+        .catch((reason: Error) => {
+          if (!cancelled) setError(reason.message || "Cloudflare could not verify your email session.");
+        })
+        .finally(() => { if (!cancelled) setLoading(false); });
+      return () => { cancelled = true; };
+    }
     if (!firebaseConfigured) {
       setLoading(false);
       return;
@@ -61,6 +84,15 @@ export default function Home() {
         setActiveConversation("");
       }
     });
+  }, []);
+
+  useEffect(() => {
+    if (!cloudflareAccessMode || !cloudflareApiUrl) return;
+    try {
+      const appOrigin = new URL(cloudflareApiUrl).origin;
+      const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+      if (!isLocal && window.location.origin !== appOrigin) window.location.replace(appOrigin);
+    } catch { /* The setup panel reports invalid configuration. */ }
   }, []);
 
   useEffect(() => {
@@ -115,10 +147,10 @@ export default function Home() {
   }
 
   async function checkEmailVerification() {
-    if (!user) return;
+    if (!user?.getIdToken || cloudflareAccessMode) return;
     setBusy(true); setError(""); setNotice("");
     try {
-      await reload(user);
+      await reload(user as User);
       const current = getFirebaseClient().auth.currentUser;
       if (current?.emailVerified) {
         await current.getIdToken(true);
@@ -135,10 +167,10 @@ export default function Home() {
   }
 
   async function resendVerification() {
-    if (!user) return;
+    if (!user?.getIdToken || cloudflareAccessMode) return;
     setBusy(true); setError(""); setNotice("");
     try {
-      await sendEmailVerification(user, { url: window.location.origin });
+      await sendEmailVerification(user as User, { url: window.location.origin });
       setNotice(`A new verification link was sent to ${user.email || "your email"}.`);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not send the verification email.");
@@ -161,6 +193,10 @@ export default function Home() {
   }
 
   async function logout() {
+    if (cloudflareAccessMode) {
+      window.location.assign(cloudflareApiUrl + "/cdn-cgi/access/logout");
+      return;
+    }
     if (!firebaseConfigured) return;
     await signOut(getFirebaseClient().auth);
     setUser(null); setDocuments([]); setConversations([]); setMessages([]); setActiveConversation("");
@@ -225,10 +261,19 @@ export default function Home() {
 
   if (loading) return <main className="auth-shell"><div className="auth-card"><p className="eyebrow">PRIVATE KNOWLEDGE WORKSPACE</p><h1>Loading your account…</h1></div></main>;
 
-  if (!firebaseConfigured || !cloudflareApiConfigured) return <main className="auth-shell"><div className="auth-card">
+  if (!cloudflareApiConfigured || (!cloudflareAccessMode && !firebaseConfigured)) return <main className="auth-shell"><div className="auth-card">
     <div className="brand-mark">EI</div><p className="eyebrow">BACKEND SETUP REQUIRED</p><h1>Connect your workspace.</h1>
-    <p className="muted">The site needs its Firebase sign-in settings and Cloudflare API address before account creation can work. No private API secret belongs in this browser app.</p>
-    <p className="tiny-note">Add the Firebase web settings and NEXT_PUBLIC_CLOUDFLARE_API_URL to <code>frontend/.env.local</code>, then build and deploy.</p>
+    <p className="muted">The site needs Cloudflare workspace settings{cloudflareAccessMode ? "" : " and Firebase sign-in settings"} before account access can work. No private API secret belongs in this browser app.</p>
+    <p className="tiny-note">Add the required public web settings and NEXT_PUBLIC_CLOUDFLARE_API_URL to <code>frontend/.env.local</code>, then build and deploy.</p>
+  </div></main>;
+
+  if (cloudflareAccessMode && !user) return <main className="auth-shell"><div className="auth-card">
+    <div className="brand-mark">EI</div><p className="eyebrow">CLOUDFLARE EMAIL SIGN-IN</p><h1>Verify your email code.</h1>
+    <p className="muted">Use the one-time code Cloudflare sent to your email. After signing in, reload this page to open your private workspace.</p>
+    {error && <p className="error">{error}</p>}
+    <a className="primary-button" href={cloudflareApiUrl}>Continue to secure sign-in</a>
+    <button className="text-button" onClick={() => window.location.reload()}>Check my sign-in again</button>
+    <p className="tiny-note">Each email code is single-use. Your documents and conversations are saved in your Cloudflare workspace under your verified email.</p>
   </div></main>;
 
   if (user && !user.emailVerified) return <main className="auth-shell"><div className="auth-card">
