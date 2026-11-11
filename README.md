@@ -17,7 +17,7 @@ The website and API run on one Cloudflare Worker. Cloudflare Access protects the
 - PDF, DOCX, TXT, and CSV text extraction runs in the browser. Limits are 5 MB, 40,000 extracted characters, and 20 chunks per document. Original files are not archived.
 - Per-user limits are 50 documents, 1,000 chunks, 50 conversations, and 100 messages per conversation.
 
-The Worker verifies the signed Cloudflare Access assertion, its issuer, signature, expiry, and application audience. Existing D1 workspaces are matched by email. A later read-only check on 2026-11-11 found 1 user, 0 documents, 1 conversation, 2 messages, and 2 messages. This confirms workspace and chat activity; no Cloudflare document upload was present in D1 at that time.
+The Worker verifies the signed Cloudflare Access assertion, its issuer, signature, expiry, and application audience. Existing D1 workspaces are matched by email. A later read-only check on 2026-11-11 found 1 user, 0 documents, 1 conversation, 2 messages. This confirms workspace and chat activity; no Cloudflare document upload was present in D1 at that time.
 
 The old Firebase Hosting copy may still display its previous Firebase sign-in flow. It is not the supported way to open the Cloudflare Access workspace. Old Firestore-only records are not automatically imported by the Access login flow.
 
@@ -29,7 +29,7 @@ The browser extracts file text and sends it over HTTPS to the Worker after Acces
 
 Email OTP is enabled through Cloudflare Access, with no custom domain and no SMS provider. Cloudflare's Free Zero Trust plan supports up to 50 users; account setup may ask for payment details, while Cloudflare says the Free plan is not charged. Workers AI, D1, and Vectorize have finite included quotas, so this project cannot guarantee a $0 invoice if limits are exceeded or the account is on a paid plan. See [Cloudflare Zero Trust plans](https://www.cloudflare.com/plans/zero-trust-services/) and the [Cloudflare One setup guide](https://developers.cloudflare.com/cloudflare-one/setup/).
 
-The site redirects unauthenticated visitors to Cloudflare Access. The project owner reports successful email sign-in and receiving answers. The latest read-only D1 check found 1 user, 0 documents, 1 conversation, 2 messages, and 2 messages, so document upload/indexing and a cited, document-grounded answer still need acceptance.
+The site redirects unauthenticated visitors to Cloudflare Access. The project owner reports successful email sign-in and receiving answers. The latest read-only D1 check found 1 user, 0 documents, 1 conversation, 2 messages, so document upload/indexing and a cited, document-grounded answer still need acceptance.
 
 This is a demonstration build, not a certified financial product. Formal security, compliance, load, backup/restore, and financial answer-quality reviews have not been completed.
 
