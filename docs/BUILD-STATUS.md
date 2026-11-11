@@ -24,7 +24,7 @@ Cloudflare Access is restricted to the One-time PIN identity provider. The polic
 - Workers AI uses BGE Small embeddings and Llama 3.3 70B FP8 Fast. If AI inference or the app budget is unavailable, the API falls back to source excerpts/keyword retrieval.
 - File parsing remains in the browser. Extracted text goes to Cloudflare; original files are not archived.
 - The older Firebase Hosting copy and legacy Firebase-token verification remain in the repository for compatibility, but they are not the current hosted login flow.
-- Old Firestore-only content is not imported by Access sign-in. The remote D1 database had 0 users, documents, and conversations when checked on 2026-11-11.
+- Old Firestore-only content is not automatically imported by Access sign-in. D1 was empty at initial deployment; the later 2026-11-11 count was 1 user, 0 documents, and 1 conversation.
 
 ## Application limits
 
@@ -53,14 +53,14 @@ The AI budget applies to this app only and cannot see requests from other Worker
 - Live Access login page: HTTP 200; email and code-related text present.
 - Live unauthenticated /api/me: HTTP 302 to Access login.
 - Access application check: self-hosted app on the Worker hostname, one-time PIN provider only, allow-everyone policy.
-- D1 remote counts on 2026-11-11: 0 users, 0 documents, 0 conversations.
+- Current D1 aggregate counts on 2026-11-11: 1 user, 0 documents, 1 conversation.
 - Existing Cloudflare Access app for Telecom Churn was not modified.
 
-## Still needs a real user check
+## Live user acceptance and remaining checks
 
-A real email address and mailbox OTP were not used, so actual code delivery and sign-in have not been proven. After you sign in with your own email code, verify that the workspace opens and that a document can be uploaded, searched, and deleted. Do not send the OTP code in chat.
+The project owner reports successfully signing in with email and receiving answers from the live app. The latest read-only D1 count shows 1 user, 0 documents, and 1 conversation. This confirms workspace/chat activity but does not confirm document ingestion or a source-grounded answer. Upload a small TXT/PDF, verify its citation, delete it, and test a second account for isolation. Do not share email PINs in chat.
 
-This is ready for a controlled demonstration after the real inbox acceptance check. It is not ready for confidential or business-critical financial workloads. Security certification, abuse/load testing, financial-answer benchmarking, backups, and restore exercises remain incomplete.
+The Cloudflare app is available for a controlled demonstration. It is not certified for confidential or business-critical financial workloads. Security review, abuse/load testing, financial-answer benchmarking, backups, and restore exercises remain incomplete.
 
 
 ## Recheck on 11 November 2026
@@ -70,7 +70,7 @@ This is ready for a controlled demonstration after the real inbox acceptance che
 - Backend pytest suite: 16 passed; one Starlette/httpx deprecation warning.
 - Local Docker Compose configuration parsed successfully. The separate cloud compose template requires actual image, database, Qdrant, secret, volume, and ingress values and was not deployed.
 - The live Worker redirected an unauthenticated request to Cloudflare Access; the email sign-in page returned HTTP 200.
-- A read-only query of remote D1 returned 0 users, 0 documents, and 0 conversations.
-- No real mailbox PIN or signed-in upload/search/delete run was completed.
+- A read-only query of remote D1 returned 1 user, 0 documents, and 1 conversation.
+- The project owner reports that email sign-in succeeds and the app returns answers. Since D1 has no document rows, document-grounded retrieval/citation and delete acceptance remain unverified.
 
-**Readiness decision:** the Cloudflare application is deployed for a controlled demo. The live email sign-in and document workflow still need user acceptance. The app is not certified for production financial data.
+**Readiness decision:** the Cloudflare application is deployed for a controlled demo and its owner reports successful sign-in and answers. A document upload/search/citation/delete check and live two-user isolation check remain. The app is not certified for production financial data.

@@ -67,4 +67,4 @@ The Docker compose file starts the original FastAPI/PostgreSQL/Qdrant stack. It 
 
 The frontend typecheck and static build pass. The Worker typecheck and Wrangler dry run pass. Local tests exercised a simulated Access identity, D1 profile creation, conversation/message persistence, separate-user isolation, and rejection of a malformed Access JWT.
 
-The live website redirects unauthenticated visitors to the Cloudflare email OTP login page. The page responds successfully, but a real OTP email delivery and signed-in workspace flow still need a user's mailbox acceptance test. The Firebase Hosting copy does not provide the current Cloudflare Access flow.
+The live website redirects unauthenticated visitors to Cloudflare Access. The project owner reports successful email sign-in and answers. A later read-only D1 query showed 1 user, 0 documents, and 1 conversation, so an uploaded-document retrieval/citation and deletion check is still needed. The Firebase Hosting copy does not provide the current Cloudflare Access flow.

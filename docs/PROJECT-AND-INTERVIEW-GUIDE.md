@@ -8,13 +8,13 @@ Enterprise Intelligence RAG is a document question-answering workspace. A user s
 
 The deployed demonstration uses Cloudflare Workers for the site and API, Cloudflare Access for email sign-in, D1 for workspace records and extracted text, Vectorize for embeddings, and Workers AI for embeddings and answer generation. A separate FastAPI/PostgreSQL/Qdrant implementation remains in the repository for local development and evaluation.
 
-**The project is deployed for a controlled demonstration. It is not certified for confidential, regulated, or business-critical financial work.** A real email-code sign-in and signed-in upload/search test still need to be completed by a user with access to their mailbox.
+**The project is deployed for a controlled demonstration. It is not certified for confidential, regulated, or business-critical financial work.** The project owner reports successful email sign-in and answers. A read-only D1 count shows 1 user, 0 documents, and 1 conversation, so document-grounded RAG has not yet been confirmed.
 
 ## Interview pitch
 
 ### 30-second explanation
 
-“Enterprise Intelligence RAG lets a user ask questions across their own business documents and see which passages support each answer. The deployed app uses Cloudflare Access email one-time codes, a Cloudflare Worker API, D1 for persistent workspace data, Vectorize for semantic search, and Workers AI to draft concise cited answers. I added tenant isolation, input limits, citations, and a source-only fallback if generation is unavailable. I tested the frontend and Worker builds and the local backend test suite. I present it as a controlled demo, because real mailbox acceptance, production security review, financial answer evaluation, and backup recovery still need validation.”
+“Enterprise Intelligence RAG lets a user ask questions across their own business documents and see which passages support each answer. The deployed app uses Cloudflare Access email one-time codes, a Cloudflare Worker API, D1 for persistent workspace data, Vectorize for semantic search, and Workers AI to draft concise cited answers. I added tenant isolation, input limits, citations, and a source-only fallback if generation is unavailable. I tested the frontend and Worker builds and the local backend test suite. I present it as a controlled demo: the owner confirmed sign-in and answers, while document-grounded retrieval, production security review, financial answer evaluation, and backup recovery still need validation.”
 
 ### Problem and solution
 
@@ -50,7 +50,7 @@ Cloudflare Access performs email verification. The Worker verifies the signed Ac
 
 The verified email is normalized and mapped to a stable D1 user record. D1 reads and writes filter records by that user ID. Vectorize searches include an owner filter, and returned vector IDs are resolved through D1 rows belonging to the same owner before their text can be used as evidence.
 
-Local tests exercise user isolation, but a live two-account browser test has not been completed. Firebase compatibility code remains in the repository. Cloudflare Access sign-in does not automatically import old Firestore-only records. The current remote D1 database has no user documents or conversations.
+Local tests exercise user isolation, but a live two-account browser test has not been completed. Firebase compatibility code remains in the repository. Cloudflare Access sign-in does not automatically import old Firestore-only records. The latest D1 count is 1 user, 0 documents, and 1 conversation.
 
 ## Document ingestion
 
@@ -91,7 +91,7 @@ Daily AI limits are shared across all users of this app: 250,000 embedding input
 | messages | Owner, conversation, role, content, citations, timestamp |
 | daily_ai_usage | Per-day app-wide embedding and generation counters |
 
-Original file bytes are not stored in D1 or an object bucket. Extracted text is kept to support later search; embeddings are kept in Vectorize. D1 is in Cloudflare’s APAC region. A read-only count check on 11 November 2026 returned zero users, documents, and conversations.
+Original file bytes are not stored in D1 or an object bucket. Extracted text is kept to support later search; embeddings are kept in Vectorize. D1 is in Cloudflare’s APAC region. A read-only count check on 11 November 2026 returned 1 user, 0 documents, and 1 conversation.
 
 ## Main Worker API routes
 
@@ -151,8 +151,8 @@ Rechecked 11 November 2026:
 - Backend test suite: 16 passed, with one Starlette/httpx deprecation warning.
 - Local Docker Compose configuration validation: passed.
 - Live Worker redirects unauthenticated visitors to Cloudflare Access; the login page returned HTTP 200.
-- Remote D1 counts: 0 users, 0 documents, 0 conversations.
-- Real mailbox OTP and signed-in cloud upload/search/delete were not performed.
+- Remote D1 counts: 1 user, 0 documents, 1 conversation.
+- The project owner reports successful email sign-in and answers. Document upload/indexing, source citations, deletion, and live two-user isolation were not confirmed.
 - Cloud Docker compose has required deployment values and was not deployed. Configuration validation is not a full container build or runtime test.
 
 ## Completion status
@@ -170,13 +170,14 @@ Rechecked 11 November 2026:
 - Backend unit tests
 - GitHub source and documentation
 
-### User acceptance still needed to verify the live user flow
+### User acceptance still needed to verify document-grounded RAG
 
-1. Sign in with a real email and confirm the PIN arrives.
-2. Upload a small searchable PDF or TXT file, ask a question with a known answer, and inspect its citation.
-3. Delete the test document and confirm it disappears.
-4. For a multi-user check, sign in with a second email and verify that it cannot see the first workspace.
-5. Decide whether the allow-everyone sign-in policy suits the intended audience.
+The owner reports that sign-in works and the app returns answers. The latest D1 count has 1 user and 1 conversation but no documents, so it does not show that a source file has been indexed in this Cloudflare workspace.
+
+1. Upload a small searchable PDF or TXT file, ask a question whose answer is in it, and inspect the citation.
+2. Delete the test document and confirm it disappears.
+3. For a multi-user check, sign in with a second email and verify it cannot see the first workspace.
+4. Decide whether the allow-everyone sign-in policy suits the intended audience.
 
 ### Required before financial production use
 
@@ -200,10 +201,10 @@ The Worker derives identity from a verified Access assertion. D1 queries filter 
 It keeps extracted text and metadata, not the original file bytes. The browser parses files before sending passages to the Worker.
 
 **Is it ready for a bank or regulated financial use?**
-No. It is a controlled demonstration. It still needs real-user OTP acceptance, financial-answer evaluation, independent security/privacy review, backup/restore testing, and applicable compliance and residency reviews.
+No. It is a controlled demonstration. The owner reports successful sign-in and answers, but document-grounded use still needs validation; it also needs financial-answer evaluation, independent security/privacy review, backup/restore testing, and applicable compliance and residency reviews.
 
 **What would you build next?**
-Complete real-mailbox and upload/search acceptance with two users, then add tested backups, abuse/rate controls, operational alerts, and a human-reviewed financial QA benchmark.
+Complete document-grounded answer and citation acceptance with two users, then add tested backups, abuse/rate controls, operational alerts, and a human-reviewed financial QA benchmark.
 
 ## Glossary
 
