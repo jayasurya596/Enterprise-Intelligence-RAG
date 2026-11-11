@@ -1,7 +1,7 @@
 # Enterprise Intelligence RAG — Project Documentation
 
-**Reviewed:** 11 November 2026  
-**Project type:** Cloudflare hosted document question-answering demonstration  
+**Reviewed:** 11 November 2026
+**Project type:** Cloudflare hosted document question-answering demonstration
 **Live site:** [enterprise-intelligence-rag-api.penchalajayasuryachappidi.workers.dev](https://enterprise-intelligence-rag-api.penchalajayasuryachappidi.workers.dev)
 
 ## 1. Project overview
