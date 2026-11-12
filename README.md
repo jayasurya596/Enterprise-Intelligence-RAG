@@ -71,4 +71,6 @@ For local Access simulation, Wrangler has a development identity in its config. 
 - docs/PRODUCTION-FIT.md — gaps before financial or business-critical use
 - docs/PROJECT-DOCUMENTATION.md — full architecture, data flow, API, setup, and verification manual
 - docs/INTERVIEW-GUIDE.md — interview pitch, demo outline, and likely questions
+- docs/Enterprise-Intelligence-RAG-Project-Documentation.docx — Word edition of the full project manual
+- docs/Enterprise-Intelligence-RAG-Interview-Guide.docx — Word edition of the interview guide
 - docs/PROJECT-AND-INTERVIEW-GUIDE.md — project overview and interviewer preparation
